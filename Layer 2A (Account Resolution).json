@@ -1,0 +1,761 @@
+{
+  "name": "Layer 2A (Account Resolution)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "name": "2A - Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -2864,
+        128
+      ],
+      "id": "ad9f4a07-2741-4be0-861f-e3bb732fbfae"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json || {};\nconst has = (k) => Object.prototype.hasOwnProperty.call(s, k);\nconst missing = [];\nconst REQ = ['airtable_record_id','run_id','processing_started_at','input','email','email_domain','email_local','domain_status','is_personal_domain','is_role_inbox','is_system_inbox','name_quality','name_quality_reason','supplied_name','domain_verification_status','domain_verification_reason'];\nfor (const k of REQ) { if (!has(k)) missing.push(k); }\nif (missing.length > 0) { throw new Error('2A input contract violation (missing): ' + missing.join(', ')); }\nconst viol = [];\nif (!s.airtable_record_id || String(s.airtable_record_id).trim() === '') viol.push('airtable_record_id:empty');\nif (s.input === null || typeof s.input !== 'object' || Array.isArray(s.input)) viol.push('input:not-object');\nif (!s.email || String(s.email).trim() === '') viol.push('email:empty');\nif (!s.email_domain || String(s.email_domain).trim() === '') viol.push('email_domain:empty');\nif (s.domain_status !== 'BUSINESS') viol.push('domain_status');\nif (typeof s.is_role_inbox !== 'boolean') viol.push('is_role_inbox:not-boolean');\nif (s.is_personal_domain !== false) viol.push('is_personal_domain');\nif (s.is_system_inbox !== false) viol.push('is_system_inbox');\nif (s.domain_verification_status !== 'MAIL_DOMAIN_VERIFIED') viol.push('domain_verification_status');\nif (viol.length > 0) { throw new Error('2A input contract violation: ' + viol.join(', ')); }\nreturn [{ json: s }];\n"
+      },
+      "name": "2A - Validate Input Contract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2640,
+        128
+      ],
+      "id": "0962a152-1dbe-4550-be2c-ca4bcad847ae"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json;\nconst lookup_domain = String(s.email_domain || '').trim().toLowerCase().replace(/\\.$/, '');\nconst account_lookup_request = { provider: 'apollo', operation: 'organization_by_domain', lookup_domain };\nreturn [{ json: { ...s, account_lookup_request, lookup_domain } }];\n"
+      },
+      "name": "2A - Prepare Account Resolution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2416,
+        128
+      ],
+      "id": "387f9d61-6ec7-47bf-a8ce-247f51e0d068"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.apollo.io/api/v1/organizations/enrich?domain={{ $json.lookup_domain }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "2A - Apollo Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2208,
+        128
+      ],
+      "retryOnFail": false,
+      "id": "38b33857-45e7-48fc-a7f6-b8a32b6ab3a0",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KVT6aZ7oOpZjoj5a",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lk = ($node && $node['2A - Apollo Lookup']) ? $node['2A - Apollo Lookup'] : null; const runIndex = (lk && typeof lk.runIndex === 'number') ? lk.runIndex : (typeof $runIndex === 'number' ? $runIndex : 0); const attempts = runIndex + 1;\nconst raw = $input.first().json || {};\nconst l1 = $('2A - Input').first().json || {};\nconst lookup_domain = String(l1.email_domain || '').trim().toLowerCase().replace(/\\.$/, '');\nfunction nn(v){ return (v === null || v === undefined || v === '') ? null : v; }\nfunction emp(o){ if (o && typeof o.employee_count === 'number') return o.employee_count; if (o && typeof o.estimated_num_employees === 'number') return o.estimated_num_employees; return null; }\nfunction mapCand(o){ return { provider: 'apollo', provider_organization_id: nn(o && o.id), name: nn(o && o.name), domain: nn(o && o.primary_domain), website_url: nn(o && o.website_url), linkedin_url: nn(o && o.linkedin_url), employee_count: emp(o), country: nn(o && o.country), location: nn(o && o.location), industry: nn(o && o.industry), description: nn(o && (o.short_description || o.long_description || o.description)) }; }\nlet request_status = 'SUCCESS';\nlet candidates = [];\nlet structural_count = null;\nif (raw && (raw.error || raw.detail)) { request_status = 'INVALID_RESPONSE'; }\nelse if (raw && Array.isArray(raw.organizations)) { candidates = raw.organizations.map(mapCand);\n  if (raw.pagination && typeof raw.pagination.total_entries === 'number') structural_count = raw.pagination.total_entries;\n  else if (typeof raw.total === 'number') structural_count = raw.total;\n  else if (typeof raw.count === 'number') structural_count = raw.count; }\nelse if (raw && raw.organization !== null && typeof raw.organization === 'object' && !Array.isArray(raw.organization)) { candidates = [mapCand(raw.organization)]; }\nelse { request_status = 'INVALID_RESPONSE'; }\nif (request_status === 'SUCCESS') { for (const c2 of candidates) { const oid = (c2.provider_organization_id === null || c2.provider_organization_id === undefined) ? '' : String(c2.provider_organization_id).trim(); const dom = (c2.domain === null || c2.domain === undefined) ? '' : String(c2.domain).trim().toLowerCase().replace(/\\.$/, ''); if (oid === '' || dom === '') { request_status = 'INVALID_RESPONSE'; break; } } }\nif (request_status === 'SUCCESS' && structural_count !== null && structural_count !== candidates.length) { request_status = 'INVALID_RESPONSE'; }\nif (request_status === 'INVALID_RESPONSE') { candidates = []; }\nconst provider_result = { provider: 'apollo', operation: 'organization_by_domain', request_status, http_status: 200, attempts, result_count: candidates.length, candidates, error: null };\nconst account_lookup_request = { provider: 'apollo', operation: 'organization_by_domain', lookup_domain };\nreturn [{ json: { ...l1, account_lookup_request, lookup_domain, provider_result } }];\n"
+      },
+      "name": "2A - Apollo Adapter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        128
+      ],
+      "id": "28ca5a72-c010-4152-aa18-2a23ae49fa1f"
+    },
+    {
+      "parameters": {
+        "jsCode": "const runIndex =\n  (typeof $runIndex === 'number' && $runIndex >= 0)\n    ? $runIndex\n    : 0;\n\nconst attempts = runIndex + 1;\nconst item = $input.first().json || {};\nconst l1 = $('2A - Input').first().json || {};\nconst lookup_domain = String(l1.email_domain || '').trim().toLowerCase().replace(/\\.$/, '');\nconst statusCode = Number(item.statusCode || item.status || 0);\nconst hasStatus = Number.isInteger(statusCode) && statusCode >= 100 && statusCode <= 599;\nlet transient = false;\nif (hasStatus) {\n  if (statusCode === 429 || statusCode === 408 || (statusCode >= 500 && statusCode <= 599)) { transient = true; }\n  else { transient = false; }\n} else {\n  const msg = String(item.error || item.message || JSON.stringify(item) || '').toLowerCase();\n  transient = /timeout|timed out|etimedout|econnreset|econnrefused|econnaborted|network|socket|aborted|unreachable/i.test(msg);\n}\nconst exhausted = attempts >= 3;\nconst shouldRetry = transient && !exhausted;\nconst delayMs = attempts === 1 ? 2000 : 5000;\nconst request_status = transient ? 'TRANSIENT_ERROR' : 'PERMANENT_ERROR';\nreturn [{ json: { shouldRetry, attempts, delayMs, exhausted, transient, request_status, statusCode, lookup_domain } }];\n"
+      },
+      "name": "2A - Apollo Classify Retry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2208,
+        368
+      ],
+      "id": "affd9fb5-4af4-4529-916e-4f985f383ba4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.shouldRetry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "id": "d26c8af9-ad5d-4768-be0f-f3d319360701"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "2A - Apollo Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        368
+      ],
+      "id": "2ee7de14-5b10-4013-96ef-7809f992818c"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delayMs / 1000 }}"
+      },
+      "name": "2A - Apollo Retry Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -1760,
+        368
+      ],
+      "id": "06bd6de8-a0f7-40ec-a679-1845235e1fcb",
+      "webhookId": "15d946e8-a5b6-41a3-8b3e-4197ea67ccc5"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst it = $input.first().json || {};\nconst l1 = $('2A - Input').first().json || {};\nconst lookup_domain = String(l1.email_domain || '').trim().toLowerCase().replace(/\\.$/, '');\nconst attempts = it.attempts || 1;\nconst request_status = it.request_status || 'PERMANENT_ERROR';\nconst provider_result = { provider: 'apollo', operation: 'organization_by_domain', request_status,\n  http_status: it.statusCode || (request_status === 'TRANSIENT_ERROR' ? 503 : 400), attempts, result_count: 0, candidates: [],\n  error: (request_status === 'TRANSIENT_ERROR' ? 'Provider unavailable after retries.' : 'Permanent provider error.') };\nconst account_lookup_request = { provider: 'apollo', operation: 'organization_by_domain', lookup_domain };\nreturn [{ json: { ...l1, account_lookup_request, lookup_domain, provider_result } }];\n"
+      },
+      "name": "2A - Apollo Error Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1760,
+        240
+      ],
+      "id": "3e06ddcb-82ab-46c6-8a87-6954b0dd259f"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst inp = $input.first().json || {};\nconst pr = inp.provider_result || { request_status: 'INVALID_RESPONSE', candidates: [], result_count: 0, attempts: 0 };\nconst rs = pr.request_status;\nconst candidates = (rs === 'SUCCESS') ? (pr.candidates || []) : [];\nconst lookup_domain = String(inp.lookup_domain || '').trim().toLowerCase().replace(/\\.$/, '');\nconst nn2 = (d) => String(d || '').trim().toLowerCase().replace(/\\.$/, '');\nlet outcome, account_resolution_status, account_resolution_reason, reason_code, resolved_domain, account_company, evidence, account_candidates;\nif (rs !== 'SUCCESS') { outcome='FAILED'; account_resolution_status=null; account_resolution_reason=null; reason_code=null; resolved_domain=null; account_company=null; evidence=[]; account_candidates=[]; }\nelse if (candidates.length === 0) { outcome='NOT_FOUND'; account_resolution_status='NOT_FOUND'; account_resolution_reason='provider_not_found'; reason_code='PROVIDER_NOT_FOUND'; resolved_domain=null; account_company=null; evidence=[]; account_candidates=[]; }\nelse if (candidates.length > 1) { outcome='AMBIGUOUS'; account_resolution_status='AMBIGUOUS'; account_resolution_reason='multiple_candidates'; reason_code='MULTIPLE_CANDIDATES'; resolved_domain=null; account_company=null; evidence=[]; account_candidates=candidates.map(c=>({provider:'apollo',provider_organization_id:c.provider_organization_id,name:c.name,domain:c.domain})); }\nelse { const c=candidates[0]; const cd=nn2(c.domain); const look=nn2(lookup_domain);\n  account_candidates=[{provider:'apollo',provider_organization_id:c.provider_organization_id,name:c.name,domain:c.domain}];\n  if (cd===look) { outcome='CONFIRMED'; account_resolution_status='CONFIRMED'; account_resolution_reason='exact_domain_match'; reason_code='EXACT_DOMAIN_MATCH'; resolved_domain=c.domain;\n    account_company={name:c.name,domain:c.domain,website_url:c.website_url,linkedin_url:c.linkedin_url,employee_count:c.employee_count,country:c.country,location:c.location,industry:c.industry,description:c.description,provider_refs:{apollo_organization_id:c.provider_organization_id}};\n    evidence=[{type:'DOMAIN_MATCH',source:'apollo',source_record_id:c.provider_organization_id,source_url:null,input_value:look,observed_value:cd,strength:'STRONG',short_evidence:'Exact normalized inbound and provider domain match.'}]; }\n  else { outcome='AMBIGUOUS'; account_resolution_status='AMBIGUOUS'; account_resolution_reason='domain_mismatch'; reason_code='DOMAIN_MISMATCH'; resolved_domain=null; account_company=null;\n    evidence=[{type:'DOMAIN_MISMATCH',source:'apollo',source_record_id:c.provider_organization_id,source_url:null,input_value:look,observed_value:c.domain||cd,strength:'STRONG',short_evidence:'Provider domain does not exactly match inbound domain.'}]; } }\nreturn [{ json: { ...inp, outcome, account_resolution_status, account_resolution_reason, reason_code, resolved_domain, account_company, evidence, account_candidates } }];\n"
+      },
+      "name": "2A - Account Resolution Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1536,
+        112
+      ],
+      "id": "ceb99e56-07cc-4ec9-9126-f70c21111e2d"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json;\nconst now = new Date().toISOString();\nconst business = (s.outcome === 'CONFIRMED' || s.outcome === 'AMBIGUOUS' || s.outcome === 'NOT_FOUND');\nlet account_resolution = null;\nif (business) { account_resolution = { status: s.account_resolution_status, reason_code: s.reason_code, input_domain: s.lookup_domain, resolved_domain: s.resolved_domain, provider: 'apollo', candidate_count: (s.account_candidates || []).length, evidence: s.evidence || [], resolved_at: now }; }\nconst company_context = (s.outcome === 'CONFIRMED') ? { status: 'unavailable', reason: 'NOT_REQUESTED', generated_at: null, expires_at: null, data: null } : { status: 'unavailable', reason: 'ACCOUNT_NOT_CONFIRMED', generated_at: null, expires_at: null, data: null };\nconst pr = s.provider_result || {};\nconst req_status = pr.request_status || 'INVALID_RESPONSE';\nconst error_code = req_status === 'TRANSIENT_ERROR' ? 'PROVIDER_UNAVAILABLE' : (req_status === 'PERMANENT_ERROR' ? 'PROVIDER_ERROR' : (req_status === 'INVALID_RESPONSE' ? 'INVALID_RESPONSE' : null));\nconst provider_diagnostics = { apollo_account_resolution: { request_status: req_status, http_status: pr.http_status || null, attempts: pr.attempts || 0, result_count: pr.result_count || 0, error_code } };\nlet manual_review, manual_review_reason, enrichment_status, result_status, routing_outcome;\nif (s.outcome === 'CONFIRMED') { manual_review=false; manual_review_reason=null; enrichment_status='processing'; result_status='pending'; routing_outcome=null; }\nelse if (s.outcome === 'AMBIGUOUS') { manual_review=true; manual_review_reason='account_company_ambiguous'; enrichment_status='manual_review'; result_status='manual'; routing_outcome='MANUAL_REVIEW'; }\nelse if (s.outcome === 'NOT_FOUND') { manual_review=true; manual_review_reason='company_not_found'; enrichment_status='manual_review'; result_status='manual'; routing_outcome='MANUAL_REVIEW'; }\nelse { manual_review=false; manual_review_reason=null; enrichment_status='failed'; result_status='failed'; routing_outcome='FAILED'; }\nreturn [{ json: { ...s, account_resolution, company_context, provider_diagnostics, manual_review, manual_review_reason, enrichment_status, result_status, routing_outcome } }];\n"
+      },
+      "name": "2A - Build Canonical Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        112
+      ],
+      "id": "3255bb58-dab3-4ab5-ad7c-c4831c2f4664"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json;\nconst recordId = s.airtable_record_id || s.recordId || '';\nconst body = {\n  \"Account Resolution Status\": s.account_resolution_status,\n  \"Account Resolution Reason\": s.account_resolution_reason,\n  \"Account Company\": s.account_company ? JSON.stringify(s.account_company) : null,\n  \"Account Resolution\": s.account_resolution ? JSON.stringify(s.account_resolution) : null,\n  \"Account Candidates\": JSON.stringify(s.account_candidates || []),\n\n  \"Company Context\": JSON.stringify(s.company_context),\n  \"Provider Diagnostics\": JSON.stringify(s.provider_diagnostics),\n  \"Manual Review Needed\": s.manual_review,\n  \"Manual Review Reason\": s.manual_review_reason,\n  \"Enrichment Status\": s.enrichment_status,\n  \"Result Status\": s.result_status,\n  \"Routing Outcome\": s.routing_outcome,\n};\nreturn [{\n  json: {\n    method: 'PATCH',\n    url: 'https://api.airtable.com/v0/appn5d5Ca7g9IyNMf/tblnUG3bEN2QqyKT4/' + recordId,\n    body: {\n      fields: body\n    }\n  }\n}];\n"
+      },
+      "name": "2A - Pack Persist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -336,
+        48
+      ],
+      "id": "210c27ef-75f6-406b-8788-0bc9e4bc675a"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "={{ $vars.AIRTABLE_RETRY_WF_ID}}",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/=%7B%7B%20$vars.AIRTABLE_RETRY_WF_ID%7D%7D"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "2A - Persist",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -176,
+        48
+      ],
+      "retryOnFail": false,
+      "id": "6d9e92c2-fd90-4642-932a-51963279da0e",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json || {};\nconst nn = (d) => String(d || '').trim().toLowerCase().replace(/\\.$/, '');\nconst pr = (s.provider_diagnostics || {}).apollo_account_resolution || null;\nlet dispatch;\nif (s.outcome === 'CONFIRMED') {\n  const ar = s.account_resolution || {};\n  const ok = s.account_resolution_status === 'CONFIRMED' && s.account_resolution_reason === 'exact_domain_match'\n    && s.account_resolution !== null && ar.status === 'CONFIRMED' && ar.reason_code === 'EXACT_DOMAIN_MATCH'\n    && ar.provider === 'apollo' && ar.candidate_count === 1\n    && nn(ar.input_domain) === nn(s.email_domain) && nn(ar.resolved_domain) === nn(s.email_domain)\n    && s.account_company !== null && s.account_company.provider_refs !== null && typeof s.account_company.provider_refs === 'object'\n    && s.account_company.provider_refs.apollo_organization_id && String(s.account_company.provider_refs.apollo_organization_id).trim() !== ''\n    && nn(s.account_company.domain) === nn(s.email_domain)\n    && Array.isArray(s.account_candidates) && s.account_candidates.length === 1\n    && pr !== null && pr.request_status === 'SUCCESS' && pr.result_count === 1\n    && s.manual_review === false && s.manual_review_reason === null\n    && s.enrichment_status === 'processing' && s.result_status === 'pending' && s.routing_outcome === null;\n  dispatch = ok ? 'LAYER2B' : 'INTERNAL_CONTRACT_ERROR';\n} else if (s.outcome === 'AMBIGUOUS') {\n  const ar = s.account_resolution || {}; const rc = ar.reason_code; const cnt = s.account_candidates || [];\n  let reasonOk = false; let shapeOk = false;\n  if (rc === 'DOMAIN_MISMATCH') { reasonOk = (s.account_resolution_reason === 'domain_mismatch'); shapeOk = (ar.candidate_count === 1 && cnt.length === 1 && pr !== null && pr.request_status === 'SUCCESS' && pr.result_count === 1); }\n  else if (rc === 'MULTIPLE_CANDIDATES') { reasonOk = (s.account_resolution_reason === 'multiple_candidates'); shapeOk = (ar.candidate_count === cnt.length && ar.candidate_count > 1 && pr !== null && pr.request_status === 'SUCCESS' && pr.result_count === ar.candidate_count); }\n  const ok = s.account_resolution_status === 'AMBIGUOUS' && s.account_resolution !== null && ar.status === 'AMBIGUOUS' && ar.provider === 'apollo'\n    && reasonOk && shapeOk && ar.resolved_domain === null && s.account_company === null && Array.isArray(cnt)\n    && pr !== null && pr.request_status === 'SUCCESS'\n    && s.manual_review === true && s.manual_review_reason === 'account_company_ambiguous'\n    && s.enrichment_status === 'manual_review' && s.result_status === 'manual' && s.routing_outcome === 'MANUAL_REVIEW';\n  dispatch = ok ? 'MANUAL_REVIEW' : 'INTERNAL_CONTRACT_ERROR';\n} else if (s.outcome === 'NOT_FOUND') {\n  const ar = s.account_resolution || {};\n  const ok = s.account_resolution_status === 'NOT_FOUND' && s.account_resolution_reason === 'provider_not_found'\n    && s.account_resolution !== null && ar.status === 'NOT_FOUND' && ar.reason_code === 'PROVIDER_NOT_FOUND'\n    && ar.provider === 'apollo' && ar.candidate_count === 0 && ar.resolved_domain === null\n    && Array.isArray(s.account_candidates) && s.account_candidates.length === 0 && s.account_company === null\n    && pr !== null && pr.request_status === 'SUCCESS' && pr.result_count === 0\n    && s.manual_review === true && s.manual_review_reason === 'company_not_found'\n    && s.enrichment_status === 'manual_review' && s.result_status === 'manual' && s.routing_outcome === 'MANUAL_REVIEW';\n  dispatch = ok ? 'MANUAL_REVIEW' : 'INTERNAL_CONTRACT_ERROR';\n} else if (s.outcome === 'FAILED') {\n  const ok = s.account_resolution === null && s.account_resolution_status === null && s.account_resolution_reason === null\n    && s.account_company === null && Array.isArray(s.account_candidates) && s.account_candidates.length === 0\n    && pr !== null && (pr.request_status === 'TRANSIENT_ERROR' || pr.request_status === 'PERMANENT_ERROR' || pr.request_status === 'INVALID_RESPONSE')\n    && s.manual_review === false && s.manual_review_reason === null\n    && s.enrichment_status === 'failed' && s.result_status === 'failed' && s.routing_outcome === 'FAILED';\n  dispatch = ok ? 'FAILED' : 'INTERNAL_CONTRACT_ERROR';\n} else {\n  dispatch = 'INTERNAL_CONTRACT_ERROR';\n}\nreturn [{ json: { ...s, dispatch } }];\n"
+      },
+      "name": "2A - Final Conformance Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1008,
+        112
+      ],
+      "id": "460b5a2f-d0f6-4edd-841e-6b33b804a64a"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "ef9b6775-7e30-4322-acca-e4d9b794ccc9",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "CONFIRMED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Confirmed"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "d6fd4e80-f7a1-48e3-ab45-91bbbad25e53",
+                    "leftValue": "={{ $json.outcome === 'AMBIGUOUS' || $json.outcome === 'NOT_FOUND' }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Ambigious&Not Found"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "32bf86e9-3085-444f-88ea-06ebf1282983",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "FAILED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Failed"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "name": "2A - Branch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -688,
+        80
+      ],
+      "id": "cc978b77-1078-48b8-9a22-6287b8e5d563"
+    },
+    {
+      "parameters": {},
+      "name": "2A - Continue to Layer 2B",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        -160
+      ],
+      "id": "4f819d5e-e8f8-47f9-8dd7-929e86220f41"
+    },
+    {
+      "parameters": {},
+      "name": "2A - Terminal Manual Review",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        240,
+        -96
+      ],
+      "id": "f82efaba-c24e-45cd-a195-43b272886472"
+    },
+    {
+      "parameters": {},
+      "name": "2A - Terminal Failed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        32,
+        480
+      ],
+      "id": "05453cb4-7f48-436e-9468-62f84d6d37ca"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $('2A - Final Conformance Gate').first().json;\n\nreturn [{\n  json: {\n    ...s,\n\n    // Persistence failure overrides terminal lifecycle.\n    // Do NOT attempt another Airtable write.\n    manual_review: false,\n    manual_review_reason: null,\n\n    enrichment_status: 'failed',\n    result_status: 'failed',\n    routing_outcome: 'FAILED',\n    dispatch: 'FAILED',\n\n    persistence_failure: {\n      stage: 'LAYER_2A_TERMINAL_PERSIST',\n      reason_code: 'PERSISTENCE_FAILURE'\n    }\n  }\n}];"
+      },
+      "name": "2A - Persist Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -256,
+        480
+      ],
+      "id": "f3c20789-f429-43f8-8645-b027adeda12f"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "ef9b6775-7e30-4322-acca-e4d9b794ccc9",
+                    "leftValue": "={{ $json.routing_outcome }}",
+                    "rightValue": "MANUAL_REVIEW",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Manual Review"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "d6fd4e80-f7a1-48e3-ab45-91bbbad25e53",
+                    "leftValue": "={{ $json.routing_outcome }}",
+                    "rightValue": "FAILED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Failed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "2A - Terminal Dispatch1",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        80,
+        176
+      ],
+      "id": "8e8a4bf8-e4a5-418a-a3d9-9988b98104cc"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $('2A - Final Conformance Gate').first().json;\n\nreturn [{\n  json: {\n    ...s\n  }\n}];"
+      },
+      "name": "2A - Restore Terminal State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "553ae90f-efec-456f-a5e8-84388e5549de"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    statusCode: 503,\n    message: 'Service Unavailable'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        32
+      ],
+      "id": "4ec338cc-ba27-42f4-8ded-dbf1acb36616",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    statusCode: 503,\n    message: 'Service Unavailable'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        32
+      ],
+      "id": "4a72ce7c-f53a-4f7d-a86a-ad9dc3464b86",
+      "name": "Code"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2A - Input": {
+      "main": [
+        [
+          {
+            "node": "2A - Validate Input Contract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Validate Input Contract": {
+      "main": [
+        [
+          {
+            "node": "2A - Prepare Account Resolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Prepare Account Resolution": {
+      "main": [
+        [
+          {
+            "node": "2A - Apollo Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Apollo Lookup": {
+      "main": [
+        [
+          {
+            "node": "2A - Apollo Adapter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2A - Apollo Classify Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Apollo Adapter": {
+      "main": [
+        [
+          {
+            "node": "2A - Account Resolution Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Apollo Classify Retry": {
+      "main": [
+        [
+          {
+            "node": "2A - Apollo Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Apollo Retry?": {
+      "main": [
+        [
+          {
+            "node": "2A - Apollo Retry Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2A - Apollo Error Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Apollo Retry Wait": {
+      "main": [
+        [
+          {
+            "node": "2A - Apollo Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Apollo Error Result": {
+      "main": [
+        [
+          {
+            "node": "2A - Account Resolution Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Account Resolution Decision": {
+      "main": [
+        [
+          {
+            "node": "2A - Build Canonical Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Build Canonical Output": {
+      "main": [
+        [
+          {
+            "node": "2A - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Pack Persist": {
+      "main": [
+        [
+          {
+            "node": "2A - Persist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Persist": {
+      "main": [
+        [
+          {
+            "node": "2A - Restore Terminal State",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2A - Persist Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Final Conformance Gate": {
+      "main": [
+        [
+          {
+            "node": "2A - Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Branch": {
+      "main": [
+        [
+          {
+            "node": "2A - Continue to Layer 2B",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2A - Pack Persist",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2A - Pack Persist",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2A - Pack Persist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Persist Failed": {
+      "main": [
+        [
+          {
+            "node": "2A - Terminal Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Terminal Dispatch1": {
+      "main": [
+        [
+          {
+            "node": "2A - Terminal Manual Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2A - Terminal Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Restore Terminal State": {
+      "main": [
+        [
+          {
+            "node": "2A - Terminal Dispatch1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2A - Continue to Layer 2B": {
+      "main": [
+        []
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "d54f82a5-8e9e-4520-94fe-77827da90363",
+  "meta": {
+    "instanceId": "103be981e8db8e32f88742df1e25a9d1be5dab7bb54ee11dc0f02d3c1876b528"
+  },
+  "nodeGroups": [],
+  "id": "Gn8EViVA07xux6gr",
+  "tags": []
+}

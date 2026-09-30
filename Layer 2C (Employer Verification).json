@@ -1,0 +1,1574 @@
+{
+  "name": "Layer 2C (Employer Verification)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "name": "2C - Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -3968,
+        128
+      ],
+      "id": "e60c6b61-5451-462f-ae59-56cd6a52df4f"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction casefold(s){ return String(s).toLowerCase().replace(/\\u00df/g,'ss').replace(/\\u03c2/g,'\\u03c3'); }\nfunction ndom(d){ return String(d||'').trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction nlabel(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKC'); x=casefold(x); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nname(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKD'); x=x.replace(/\\p{M}/gu,''); x=casefold(x); x=x.replace(/['\\u2019\\u02bc\\u2018]/gu,''); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nameCompare(a,b){\n  const na=nname(a), nb=nname(b); if(!na||!nb) return 'UNUSABLE'; if(na===nb) return 'CONSISTENT';\n  const ta=na.split(' '), tb=nb.split(' ');\n  if(ta.length===tb.length && ta.length>1 && JSON.stringify([...ta].sort())===JSON.stringify([...tb].sort())) return 'UNUSABLE';\n  if(ta.length>=2 && tb.length>=2 && ta[0]===tb[0] && ta[ta.length-1]===tb[tb.length-1]){\n    const ma=ta.slice(1,-1), mb=tb.slice(1,-1);\n    if(ma.length===0||mb.length===0) return 'CONSISTENT';\n    if(ma.length!==mb.length) return 'UNUSABLE';\n    for(let i=0;i<ma.length;i++){ const a=ma[i],b=mb[i]; if(a===b) continue; if(a.length===1&&b.startsWith(a)) continue; if(b.length===1&&a.startsWith(b)) continue; return 'UNUSABLE'; }\n    return 'CONSISTENT';\n  }\n  if(ta.length>=2 && tb.length>=2 && ta[0]!==tb[0] && ta[ta.length-1]!==tb[tb.length-1]) return 'CONFLICT';\n  return 'UNUSABLE';\n}\nfunction isSafePersonUrl(u){\n  if(u==null||u==='') return false; let x=String(u).trim();\n  if(!/^https?:\\/\\//i.test(x)) x='https://'+x;\n  const m = x.match(/^https?:\\/\\/([^\\/?#]+)([^?#]*)/i); if(!m) return false;\n  let host=m[1].toLowerCase().replace(/^www\\./,''); if(host!=='linkedin.com') return false;\n  let path=(m[2]||'').split('?')[0].split('#')[0];\n  const pm=path.match(/^\\/in\\/([^\\/]+)$/i); return !!(pm && pm[1] && pm[1].trim()!=='');\n}\nconst s=$input.first().json||{};const p=[];if(s.account_resolution_status!=='CONFIRMED')p.push('account_resolution_status');if(s.account_company==null)p.push('account_company');if(s.inbound_employer_verification!=null)p.push('inbound_employer_verification');if(s.matched_employer!=null)p.push('matched_employer');if(s.manual_review!==false)p.push('manual_review');if(s.manual_review_reason!=null)p.push('manual_review_reason');if(s.enrichment_status!=='processing')p.push('enrichment_status');if(s.result_status!=='pending')p.push('result_status');if(s.routing_outcome!=null)p.push('routing_outcome');var ps=s.person_resolution_status;if(ps==='CONFIRMED'){if(s.person==null)p.push('person_null');if(!(s.person&&s.person.provider_refs&&s.person.provider_refs.apollo_person_id))p.push('apollo_person_id');if(s.person&&s.person.current_title!=null)p.push('current_title_not_null');}else if(ps==='NOT_FOUND'||ps==='SKIPPED_ROLE_INBOX'){if(s.person!=null)p.push('person_on_skip');if(s.matched_employer_candidate!=null)p.push('candidate_on_skip');}else{p.push('person_resolution_status_terminal');}return [{json:Object.assign({},s,{gate_ok:p.length===0,_2c_problems:p})}];"
+      },
+      "name": "2C - Upstream Contract Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3744,
+        128
+      ],
+      "id": "fa165978-5b65-410f-95a2-92c8bca3c496"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.gate_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "2C - Gate Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -3520,
+        128
+      ],
+      "id": "71efc5b6-80f7-40f8-9e63-9390979b40c1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s=$input.first().json||{};const iev={ status:'FAILED', reason:'INTERNAL_CONTRACT_ERROR', identity:{ mode:'NOT_EVALUATED', anchor_status:'NOT_EVALUATED', requested_profile_url:null, observed_profile_url:null, status:'NOT_EVALUATED', profile_name_corroboration:'NOT_EVALUATED', profile_observation:null }, provider_candidate_verdict:'NOT_EVALUATED', account_affiliation_status:'NOT_EVALUATED', selected_affiliation:null, observed_current_role_organizations:[], matched_employer_field_conflicts:[], current_title_status:'NOT_EVALUATED', current_title:null, source_url:null, short_evidence:'INTERNAL_CONTRACT_ERROR', current_roles_considered:[], diagnostics:{ attempts:0, http_status:null, error_code:null, retrieved_at:null } };return [{json:Object.assign({},s,{inbound_employer_verification:iev,matched_employer:null,manual_review:false,manual_review_reason:null,enrichment_status:'failed',result_status:'failed',routing_outcome:'FAILED',_2c_decision:'FAILED'})}];"
+      },
+      "name": "2C - Build Contract Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3520,
+        320
+      ],
+      "id": "27a1ff06-e517-4f32-b27f-a6f35732146a"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s=$input.first().json||{};const b=s.person_resolution_status==='NOT_FOUND'?'SKIP_PERSON_NOT_RESOLVED':(s.person_resolution_status==='SKIPPED_ROLE_INBOX'?'SKIP_ROLE_INBOX':'CONFIRMED');return [{json:Object.assign({},s,{_2c_branch:b})}];"
+      },
+      "name": "2C - Eligibility",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3296,
+        128
+      ],
+      "id": "9c9ccd9c-dadf-4ef7-87f4-aabcb30c55d4"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2c_branch }}",
+                    "rightValue": "CONFIRMED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "a82af8ab-3d83-4554-9825-e2f254ddf01a"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2c_branch }}",
+                    "rightValue": "SKIP_PERSON_NOT_RESOLVED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "83dc2453-c2bd-47c6-9c30-d3c2e9aab1d4"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2c_branch }}",
+                    "rightValue": "SKIP_ROLE_INBOX",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "e83b6e09-a155-430f-b022-9d7f65a19835"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 3
+        }
+      },
+      "name": "2C - Eligibility Branch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -3088,
+        128
+      ],
+      "id": "68bd7f21-aa78-4f5e-b649-fac61676a4f9"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s=$input.first().json||{};const reason=s.person_resolution_status==='NOT_FOUND'?'SKIPPED_PERSON_NOT_RESOLVED':'SKIPPED_ROLE_INBOX';const iev={status:'SKIPPED',reason:reason,identity:{mode:'NOT_APPLICABLE',anchor_status:'NOT_APPLICABLE',requested_profile_url:null,observed_profile_url:null,status:'NOT_APPLICABLE',profile_name_corroboration:'NOT_APPLICABLE',profile_observation:null},provider_candidate_verdict:'NOT_APPLICABLE',account_affiliation_status:'NOT_APPLICABLE',selected_affiliation:null,observed_current_role_organizations:[],matched_employer_field_conflicts:[],current_title_status:'NOT_APPLICABLE',current_title:null,source_url:null,short_evidence:reason,current_roles_considered:[],diagnostics:{attempts:0,http_status:null,error_code:null,retrieved_at:null}};return [{json:Object.assign({},s,{inbound_employer_verification:iev,matched_employer:null,manual_review:false,manual_review_reason:null,enrichment_status:'processing',result_status:'pending',routing_outcome:null,_2c_decision:'SKIPPED'})}];"
+      },
+      "name": "2C - Build Skip Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3088,
+        288
+      ],
+      "id": "f24ec48d-841d-4d48-8e29-49800f14ab92"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction casefold(s){ return String(s).toLowerCase().replace(/\\u00df/g,'ss').replace(/\\u03c2/g,'\\u03c3'); }\nfunction ndom(d){ return String(d||'').trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction nlabel(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKC'); x=casefold(x); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nname(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKD'); x=x.replace(/\\p{M}/gu,''); x=casefold(x); x=x.replace(/['\\u2019\\u02bc\\u2018]/gu,''); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nameCompare(a,b){\n  const na=nname(a), nb=nname(b); if(!na||!nb) return 'UNUSABLE'; if(na===nb) return 'CONSISTENT';\n  const ta=na.split(' '), tb=nb.split(' ');\n  if(ta.length===tb.length && ta.length>1 && JSON.stringify([...ta].sort())===JSON.stringify([...tb].sort())) return 'UNUSABLE';\n  if(ta.length>=2 && tb.length>=2 && ta[0]===tb[0] && ta[ta.length-1]===tb[tb.length-1]){\n    const ma=ta.slice(1,-1), mb=tb.slice(1,-1);\n    if(ma.length===0||mb.length===0) return 'CONSISTENT';\n    if(ma.length!==mb.length) return 'UNUSABLE';\n    for(let i=0;i<ma.length;i++){ const a=ma[i],b=mb[i]; if(a===b) continue; if(a.length===1&&b.startsWith(a)) continue; if(b.length===1&&a.startsWith(b)) continue; return 'UNUSABLE'; }\n    return 'CONSISTENT';\n  }\n  if(ta.length>=2 && tb.length>=2 && ta[0]!==tb[0] && ta[ta.length-1]!==tb[tb.length-1]) return 'CONFLICT';\n  return 'UNUSABLE';\n}\nfunction isSafePersonUrl(u){\n  if(u==null||u==='') return false; let x=String(u).trim();\n  if(!/^https?:\\/\\//i.test(x)) x='https://'+x;\n  const m = x.match(/^https?:\\/\\/([^\\/?#]+)([^?#]*)/i); if(!m) return false;\n  let host=m[1].toLowerCase().replace(/^www\\./,''); if(host!=='linkedin.com') return false;\n  let path=(m[2]||'').split('?')[0].split('#')[0];\n  const pm=path.match(/^\\/in\\/([^\\/]+)\\/?$/i); return !!(pm && pm[1] && pm[1].trim()!=='');\n}\nconst s=$input.first().json||{};const u=s.person&&s.person.linkedin_url?s.person.linkedin_url:null;const a=(u===null||u===undefined||u==='')?'MISSING':(isSafePersonUrl(u)?'VALID':'INVALID');return [{json:Object.assign({},s,{_2c_anchor_status:a})}];"
+      },
+      "name": "2C - Validate Profile Anchor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2864,
+        128
+      ],
+      "id": "073a252a-4dc5-4214-a7e2-947c38a881f4"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2c_anchor_status }}",
+                    "rightValue": "VALID",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2c_anchor_status }}",
+                    "rightValue": "MISSING",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2c_anchor_status }}",
+                    "rightValue": "INVALID",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 3
+        }
+      },
+      "name": "2C - Anchor Decision",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -2640,
+        128
+      ],
+      "id": "8b880ac5-a5df-4d76-a2d8-9e96bcbf3b85"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s=$input.first().json||{};const reason=s._2c_anchor_status==='INVALID'?'INVALID_PROFILE_ANCHOR':'NO_SAFE_PROFILE_ANCHOR';const iev={status:'UNVERIFIED',reason:reason,identity:{mode:(s._2c_anchor_status==='MISSING'?'NO_SAFE_PROFILE_ANCHOR':'INVALID_PROFILE_ANCHOR'),anchor_status:s._2c_anchor_status,requested_profile_url:null,observed_profile_url:null,status:'NOT_EVALUATED',profile_name_corroboration:'NOT_EVALUATED',profile_observation:null},provider_candidate_verdict:'NOT_EVALUATED',account_affiliation_status:'NOT_EVALUATED',selected_affiliation:null,observed_current_role_organizations:[],matched_employer_field_conflicts:[],current_title_status:'NOT_EVALUATED',current_title:null,source_url:null,short_evidence:reason,current_roles_considered:[],diagnostics:{attempts:0,http_status:null,error_code:null,retrieved_at:null}};return [{json:Object.assign({},s,{inbound_employer_verification:iev,matched_employer:null,manual_review:true,manual_review_reason:'employer_unverified',enrichment_status:'manual_review',result_status:'manual',routing_outcome:'MANUAL_REVIEW',_2c_decision:'UNVERIFIED'})}];"
+      },
+      "name": "2C - Build No/Invalid Anchor Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2640,
+        288
+      ],
+      "id": "49d304d1-f0b7-4bc6-ad47-2dfe4ada3b36"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction casefold(s){ return String(s).toLowerCase().replace(/\\u00df/g,'ss').replace(/\\u03c2/g,'\\u03c3'); }\nfunction ndom(d){ return String(d||'').trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction nlabel(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKC'); x=casefold(x); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nname(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKD'); x=x.replace(/\\p{M}/gu,''); x=casefold(x); x=x.replace(/['\\u2019\\u02bc\\u2018]/gu,''); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nameCompare(a,b){\n  const na=nname(a), nb=nname(b); if(!na||!nb) return 'UNUSABLE'; if(na===nb) return 'CONSISTENT';\n  const ta=na.split(' '), tb=nb.split(' ');\n  if(ta.length===tb.length && ta.length>1 && JSON.stringify([...ta].sort())===JSON.stringify([...tb].sort())) return 'UNUSABLE';\n  if(ta.length>=2 && tb.length>=2 && ta[0]===tb[0] && ta[ta.length-1]===tb[tb.length-1]){\n    const ma=ta.slice(1,-1), mb=tb.slice(1,-1);\n    if(ma.length===0||mb.length===0) return 'CONSISTENT';\n    if(ma.length!==mb.length) return 'UNUSABLE';\n    for(let i=0;i<ma.length;i++){ const a=ma[i],b=mb[i]; if(a===b) continue; if(a.length===1&&b.startsWith(a)) continue; if(b.length===1&&a.startsWith(b)) continue; return 'UNUSABLE'; }\n    return 'CONSISTENT';\n  }\n  if(ta.length>=2 && tb.length>=2 && ta[0]!==tb[0] && ta[ta.length-1]!==tb[tb.length-1]) return 'CONFLICT';\n  return 'UNUSABLE';\n}\nfunction isSafePersonUrl(u){\n  if(u==null||u==='') return false; let x=String(u).trim();\n  if(!/^https?:\\/\\//i.test(x)) x='https://'+x;\n  const m = x.match(/^https?:\\/\\/([^\\/?#]+)([^?#]*)/i); if(!m) return false;\n  let host=m[1].toLowerCase().replace(/^www\\./,''); if(host!=='linkedin.com') return false;\n  let path=(m[2]||'').split('?')[0].split('#')[0];\n  const pm=path.match(/^\\/in\\/([^\\/]+)$/i); return !!(pm && pm[1] && pm[1].trim()!=='');\n}\nconst s=$input.first().json||{};\nconst canonicalUrl=s.person&&s.person.linkedin_url?s.person.linkedin_url:null;\nconst preExisting=(s.requested_profile_url!=null&&s.requested_profile_url!==undefined)?String(s.requested_profile_url).trim():null;\nconst preExistingConflict = !!(preExisting && nurl(preExisting)!==nurl(canonicalUrl));\nconst missingCanonical = !canonicalUrl;\nconst _2c_precall_ok = !(preExistingConflict || missingCanonical);\nconst requested_profile_url = _2c_precall_ok ? canonicalUrl : null;\nreturn [{json:Object.assign({},s,{requested_profile_url:requested_profile_url,attempt:1,_2c_precall_ok:_2c_precall_ok,_2c_precall_reason: preExistingConflict?'PRECALL_URL_CONFLICT':(missingCanonical?'PRECALL_MISSING_CANONICAL':null)})}];"
+      },
+      "name": "2C - Prepare Exact Profile Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2416,
+        128
+      ],
+      "id": "50af995a-946d-49fa-b2e1-e429d7f8a7e6"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "5cpETg70ocro8siF",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/5cpETg70ocro8siF",
+          "cachedResultName": "PROFILE SOURCE — Apollo Exact-Email Profile v4 FIXED"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "2C - Exact Profile Provider",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -2208,
+        128
+      ],
+      "retryOnFail": false,
+      "id": "dc089d46-b32f-404c-a9b2-14e78d93a446",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction casefold(s){ return String(s).toLowerCase().replace(/\\u00df/g,'ss').replace(/\\u03c2/g,'\\u03c3'); }\nfunction ndom(d){ return String(d||'').trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction nlabel(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKC'); x=casefold(x); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nname(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKD'); x=x.replace(/\\p{M}/gu,''); x=casefold(x); x=x.replace(/['\\u2019\\u02bc\\u2018]/gu,''); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nameCompare(a,b){\n  const na=nname(a), nb=nname(b); if(!na||!nb) return 'UNUSABLE'; if(na===nb) return 'CONSISTENT';\n  const ta=na.split(' '), tb=nb.split(' ');\n  if(ta.length===tb.length && ta.length>1 && JSON.stringify([...ta].sort())===JSON.stringify([...tb].sort())) return 'UNUSABLE';\n  if(ta.length>=2 && tb.length>=2 && ta[0]===tb[0] && ta[ta.length-1]===tb[tb.length-1]){\n    const ma=ta.slice(1,-1), mb=tb.slice(1,-1);\n    if(ma.length===0||mb.length===0) return 'CONSISTENT';\n    if(ma.length!==mb.length) return 'UNUSABLE';\n    for(let i=0;i<ma.length;i++){ const a=ma[i],b=mb[i]; if(a===b) continue; if(a.length===1&&b.startsWith(a)) continue; if(b.length===1&&a.startsWith(b)) continue; return 'UNUSABLE'; }\n    return 'CONSISTENT';\n  }\n  if(ta.length>=2 && tb.length>=2 && ta[0]!==tb[0] && ta[ta.length-1]!==tb[tb.length-1]) return 'CONFLICT';\n  return 'UNUSABLE';\n}\nfunction isSafePersonUrl(u){\n  if(u==null||u==='') return false; let x=String(u).trim();\n  if(!/^https?:\\/\\//i.test(x)) x='https://'+x;\n  const m = x.match(/^https?:\\/\\/([^\\/?#]+)([^?#]*)/i); if(!m) return false;\n  let host=m[1].toLowerCase().replace(/^www\\./,''); if(host!=='linkedin.com') return false;\n  let path=(m[2]||'').split('?')[0].split('#')[0];\n  const pm=path.match(/^\\/in\\/([^\\/]+)$/i); return !!(pm && pm[1] && pm[1].trim()!=='');\n}\n\n/* ONLY this adapter inspects raw profile-source payloads. */\nconst raw=$input.first().json||{};\nconst pre=$('2C - Prepare Exact Profile Request').first().json||{};\nconst attempts =\n  (typeof $prevNode.runIndex === 'number' && $prevNode.runIndex >= 0)\n    ? $prevNode.runIndex + 1\n    : 1;\nfunction normRetrievedAt(t){\n  if(t==null||t==='') return null; const s=String(t).trim();\n  const m=s.match(/^(\\d{4})-(\\d{2})-(\\d{2})[Tt ](\\d{2}):(\\d{2})(?::(\\d{2}))?(?:\\.\\d+)?(Z|([+-])(\\d{2})(?::?(\\d{2}))?)$/);\n  if(!m) return null;\n  const y=+m[1],mo=+m[2],d=+m[3],h=+m[4],mi=+m[5],sec=+(m[6]||'0');\n  if(mo<1||mo>12) return null;\n  if(h>23||mi>59||sec>59) return null;\n  const dim=[31, (y%4===0&&(y%100!==0||y%400===0))?29:28, 31,30,31,30,31,31,30,31,30,31];\n  if(d<1||d>dim[mo-1]) return null;\n  const mo2=mo-1;\n  let ms=Date.UTC(y,mo2,d,h,mi,sec);\n  const tz=m[7];\n  if(tz!=='Z'&&tz!==undefined){ const sign=m[8]==='-'?-1:1; const oh=+m[9]||0; const om=+m[10]||0; if(oh>23||om>59) return null; ms-=sign*(oh*60+om)*60000; }\n  if(isNaN(ms)) return null; const dt=new Date(ms); const p=(n)=>String(n).padStart(2,'0');\n  return { utc: dt.getUTCFullYear()+'-'+p(dt.getUTCMonth()+1)+'-'+p(dt.getUTCDate())+'T'+p(dt.getUTCHours())+':'+p(dt.getUTCMinutes())+':'+p(dt.getUTCSeconds())+'Z',\n           date: dt.getUTCFullYear()+'-'+p(dt.getUTCMonth()+1)+'-'+p(dt.getUTCDate()) };\n}\nconst requested=pre.requested_profile_url||'';\nconst nullEndCurrent = !!(raw.adapter_capabilities && raw.adapter_capabilities.null_end_is_current===true);\nconst namespacedSourceIds = (raw.adapter_capabilities && Array.isArray(raw.adapter_capabilities.namespaced_source_ids)) ? raw.adapter_capabilities.namespaced_source_ids : [];\nlet status; let profile=null; let observed=null; let retrieved=null; let http_status=200;\nconst rawStatus = raw && raw.status ? String(raw.status) : null;\nif(rawStatus==='NO_PROFILE'){ status = (raw.profile===null||raw.profile===undefined) ? 'NO_PROFILE' : 'INVALID_RESPONSE'; }\nelse if(rawStatus==='TRANSIENT_ERROR'){ status='TRANSIENT_ERROR'; http_status=(raw.http_status||503); }\nelse if(rawStatus==='PERMANENT_ERROR'){ status='PERMANENT_ERROR'; http_status=(raw.http_status||400); }\nelse if(rawStatus==='INVALID_RESPONSE'){ status='INVALID_RESPONSE'; }\nelse if(rawStatus==='MATCH'){\n  if(raw.requested_profile_url!=null&&raw.requested_profile_url!==undefined&&nurl(raw.requested_profile_url)!==nurl(requested)){ status='INVALID_RESPONSE'; }\n  else { const rt=normRetrievedAt(raw.retrieved_at);\n  if(!rt){ status='INVALID_RESPONSE'; }\n  else if(!raw.observed_profile_url){ status='INVALID_RESPONSE'; }\n  else if(!(raw.profile && typeof raw.profile==='object')){ status='INVALID_RESPONSE'; }\n  else if(!Array.isArray(raw.profile.work_history)){ status='INVALID_RESPONSE'; }\n  else { status='MATCH'; observed=raw.observed_profile_url;\n  const wh = Array.isArray(raw.profile.work_history) ? raw.profile.work_history : [];\nconst normalized_wh = wh.map(function(w){\n  const org=(w&&w.organization&&typeof w.organization==='object')?w.organization:null;\n\n  const providerCurrentStatus =\n    (w && typeof w.provider_current_status === 'boolean')\n      ? w.provider_current_status\n      : (w && typeof w.is_current === 'boolean')\n        ? w.is_current\n        : (w && typeof w.current === 'boolean')\n          ? w.current\n          : null;\n\n  return {\n    title:(w&&w.title)||null,\n    description:(w&&w.description)||null,\n    organization: org ? {\n      name:org.name||null,\n      domain:org.domain||null,\n      linkedin_url:org.linkedin_url||null,\n      provider_refs:org.provider_refs||null,\n      target_reference:org.target_reference||null\n    } : null,\n    start_date_raw:(w&&w.start_date_raw)||null,\n    end_date_raw:(w&&w.end_date_raw)||null,\n    provider_current_status: providerCurrentStatus\n  };\n});\n\nprofile={\n  name:raw.profile.name||null,\n  headline:raw.profile.headline||null,\n  work_history:normalized_wh,\n  current_status_mapping:'STRUCTURED_PROVIDER_CURRENT_FLAG'\n};\n  retrieved=rt; } }\n} else { status='INVALID_RESPONSE'; }\nconst profile_result={ provider:'linkedin_profile_source', operation:'profile_by_exact_url', status, requested_profile_url:requested, observed_profile_url:observed, profile,\n  adapter_capabilities:{ null_end_is_current: nullEndCurrent, namespaced_source_ids: namespacedSourceIds },\n  diagnostics:{ http_status: (status==='MATCH'||status==='NO_PROFILE') ? http_status : (raw.http_status||http_status), attempts, error_code:null, retrieved_at: retrieved?retrieved.utc:null, retrieval_date: retrieved?retrieved.date:null } };\nreturn [{ json:{ ...pre, profile_result } }];\n"
+      },
+      "name": "2C - Profile Adapter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        64
+      ],
+      "id": "2f25dbae-3283-40c8-a73a-fe510f0b020b"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst item=$input.first().json||{}; const pre=$('2C - Prepare Exact Profile Request').first().json||{};\nconst runIndex = (typeof $runIndex === 'number' && $runIndex >= 0) ? $runIndex : 0;\nconst attempts = runIndex + 1;\nlet transient=false; let parsedStatus=null;\nif (item.profile_result && item.profile_result.status==='TRANSIENT_ERROR'){ transient=true; parsedStatus=(item.profile_result.diagnostics&&item.profile_result.diagnostics.http_status)?item.profile_result.diagnostics.http_status:null; }\nelse if (item.profile_result && item.profile_result.status==='PERMANENT_ERROR'){ transient=false; parsedStatus=(item.profile_result.diagnostics&&item.profile_result.diagnostics.http_status)?item.profile_result.diagnostics.http_status:null; }\nelse {\n  const err = item.error;\n  let statusCode = null;\n  if (err && typeof err === 'object') { statusCode = err.statusCode || err.status || err.code || null;\n    if (!statusCode && err.response && typeof err.response === 'object') { statusCode = err.response.status || err.response.statusCode || null; } }\n  if (!statusCode) statusCode = item.statusCode || item.status || null;\n  let msg='';\n  if (err && typeof err==='object') msg = String(err.message || err.name || '');\n  else if (err) msg = String(err);\n  if (!msg) msg = String(item.message || '');\n  // hardened message extraction: a 3-digit status preceded by status/http marker, or \"NNN -\" at start;\n  // never a bare (d{3}) that can match years or arbitrary three-digit text.\n  if (!statusCode) {\n    const mm = msg.match(/(?:status(?:\\s*code)?[\\s:=-]*|http[\\s:=/-]*)(\\d{3})/i);\n    if (mm) { statusCode = Number(mm[1]); }\n    else { const mm2 = msg.match(/^(\\d{3})(?:\\s|-|$)/); if (mm2) statusCode = Number(mm2[1]); }\n  }\n  const sc = statusCode ? Number(statusCode) : null;\n  if (Number.isInteger(sc) && sc>=100 && sc<=599) { parsedStatus=sc; transient = (sc===429 || sc===408 || (sc>=500 && sc<=599)); }\n  else { const low=msg.toLowerCase(); transient=/timeout|timed out|etimedout|econnreset|econnrefused|econnaborted|network|socket|aborted|unreachable/.test(low); }\n}\nconst exhausted = attempts >= 3;\nconst shouldRetry = transient && !exhausted;\nconst delayMs = attempts===1?2000:5000;\nconst request_status = transient ? 'TRANSIENT_ERROR' : 'PERMANENT_ERROR';\nconst next_attempt = attempts + 1;\nreturn [{ json: { ...pre, shouldRetry, attempts, next_attempt, attempt: next_attempt, delayMs, request_status, statusCode: parsedStatus } }];\n"
+      },
+      "name": "2C - Profile Retry Classifier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2208,
+        352
+      ],
+      "id": "3949be92-fd06-4b79-9784-7d35cc3d50da"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.shouldRetry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "2C - Profile Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        352
+      ],
+      "id": "99421abc-29ae-4cb9-a8c6-1910393a7d20"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delayMs / 1000 }}"
+      },
+      "name": "2C - Profile Retry Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -1760,
+        352
+      ],
+      "id": "6d8b405a-5a61-425c-9d7c-a2f16855989f",
+      "webhookId": "10e15733-0183-4045-bd23-9c60ae0fe9c4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const it = $input.first().json || {};\nconst pre = $('2C - Prepare Exact Profile Request').first().json || {};\n\nconst status =\n  it.request_status ||\n  (it.profile_result && it.profile_result.status) ||\n  'PERMANENT_ERROR';\n\nconst attempts =\n  it.attempts ||\n  (\n    it.profile_result &&\n    it.profile_result.diagnostics &&\n    it.profile_result.diagnostics.attempts\n  ) ||\n  1;\n\nconst httpStatus =\n  it.statusCode ||\n  (\n    it.profile_result &&\n    it.profile_result.diagnostics &&\n    it.profile_result.diagnostics.http_status\n  ) ||\n  (status === 'TRANSIENT_ERROR' ? 503 : 400);\n\nconst profile_result = {\n  provider: 'linkedin_profile_source',\n  operation: 'profile_by_exact_url',\n  status,\n  requested_profile_url: pre.requested_profile_url || null,\n  observed_profile_url: null,\n  profile: null,\n  diagnostics: {\n    http_status: httpStatus,\n    attempts,\n    error_code: null,\n    retrieved_at: null,\n    retrieval_date: null\n  }\n};\n\nconst reason =\n  status === 'TRANSIENT_ERROR'\n    ? 'PROVIDER_TRANSIENT_FAILURE_EXHAUSTED'\n    : 'PROVIDER_PERMANENT_FAILURE';\n\nconst iev = {\n  status: 'FAILED',\n  reason,\n\n  identity: {\n    mode: 'NOT_EVALUATED',\n    anchor_status: 'NOT_EVALUATED',\n    requested_profile_url: null,\n    observed_profile_url: null,\n    status:\n      status === 'TRANSIENT_ERROR'\n        ? 'TRANSIENT_ERROR_EXHAUSTED'\n        : 'PERMANENT_ERROR',\n    profile_name_corroboration: 'NOT_EVALUATED',\n    profile_observation: null\n  },\n\n  provider_candidate_verdict: 'NOT_EVALUATED',\n  account_affiliation_status: 'NOT_EVALUATED',\n\n  selected_affiliation: null,\n  observed_current_role_organizations: [],\n  matched_employer_field_conflicts: [],\n\n  current_title_status: 'NOT_EVALUATED',\n  current_title: null,\n\n  source_url: null,\n  short_evidence: reason,\n  current_roles_considered: [],\n\n  diagnostics: {\n    attempts,\n    http_status: httpStatus,\n    error_code: null,\n    retrieved_at: null\n  }\n};\n\nreturn [{\n  json: {\n    ...pre,\n    profile_result,\n    inbound_employer_verification: iev,\n    matched_employer: null,\n\n    manual_review: false,\n    manual_review_reason: null,\n\n    enrichment_status: 'failed',\n    result_status: 'failed',\n    routing_outcome: 'FAILED',\n\n    _2c_decision: 'FAILED'\n  }\n}];"
+      },
+      "name": "2C - Profile Error Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1760,
+        -64
+      ],
+      "id": "221358c3-d82d-4aa3-888f-5fec96fec480"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{}; const pre=$('2C - Prepare Exact Profile Request').first().json||{};\nconst iev={ status:'FAILED', reason:'PROVIDER_INVALID_RESPONSE', identity:{ mode:'NOT_EVALUATED', anchor_status:'NOT_EVALUATED', requested_profile_url:null, observed_profile_url:null, status:'INVALID_RESPONSE', profile_name_corroboration:'NOT_EVALUATED', profile_observation:null }, provider_candidate_verdict:'NOT_EVALUATED', account_affiliation_status:'NOT_EVALUATED', selected_affiliation:null, observed_current_role_organizations:[], matched_employer_field_conflicts:[], current_title_status:'NOT_EVALUATED', current_title:null, source_url:null, short_evidence:'PROVIDER_INVALID_RESPONSE', current_roles_considered:[], diagnostics:{ attempts:(s.profile_result&&s.profile_result.diagnostics?s.profile_result.diagnostics.attempts:1), http_status:(s.profile_result&&s.profile_result.diagnostics?s.profile_result.diagnostics.http_status:null), error_code:null, retrieved_at:null } };\nreturn [{ json:{ ...s, inbound_employer_verification:iev, matched_employer:null, manual_review:false, manual_review_reason:null, enrichment_status:'failed', result_status:'failed', routing_outcome:'FAILED', _2c_decision:'FAILED' } }];\n"
+      },
+      "name": "2C - Invalid Response Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1760,
+        240
+      ],
+      "id": "085fb85f-46d9-42cc-a315-3ecfd737fd9b"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.profile_result.status }}",
+                    "rightValue": "MATCH",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.profile_result.status }}",
+                    "rightValue": "NO_PROFILE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.profile_result.status }}",
+                    "rightValue": "TRANSIENT_ERROR",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.profile_result.status }}",
+                    "rightValue": "PERMANENT_ERROR",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.profile_result.status }}",
+                    "rightValue": "INVALID_RESPONSE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 5
+        }
+      },
+      "name": "2C - Profile Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -1536,
+        80
+      ],
+      "id": "d90f655d-961d-4eec-9aa9-d9f3a1865422"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{};\nconst iev={ status:'UNVERIFIED', reason:'PROFILE_NOT_FOUND', identity:{ mode:'EXACT_LINKEDIN_URL', anchor_status:'VALID', requested_profile_url:s.requested_profile_url||null, observed_profile_url:null, status:'NO_PROFILE', profile_name_corroboration:'NOT_EVALUATED', profile_observation:null }, provider_candidate_verdict:'NOT_EVALUATED', account_affiliation_status:'NOT_EVALUATED', selected_affiliation:null, observed_current_role_organizations:[], matched_employer_field_conflicts:[], current_title_status:'NOT_EVALUATED', current_title:null, source_url:s.requested_profile_url||null, short_evidence:'PROFILE_NOT_FOUND', current_roles_considered:[], diagnostics:{ attempts:s.profile_result&&s.profile_result.diagnostics?s.profile_result.diagnostics.attempts:1, http_status:200, error_code:null, retrieved_at:null } };\nreturn [{ json:{ ...s, inbound_employer_verification:iev, matched_employer:null, manual_review:true, manual_review_reason:'employer_unverified', enrichment_status:'manual_review', result_status:'manual', routing_outcome:'MANUAL_REVIEW', _2c_decision:'UNVERIFIED' } }];\n"
+      },
+      "name": "2C - Build No Profile Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1536,
+        288
+      ],
+      "id": "b2340882-5d23-4219-843e-e6e0a1e9de6e"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction casefold(s){ return String(s).toLowerCase().replace(/\\u00df/g,'ss').replace(/\\u03c2/g,'\\u03c3'); }\nfunction ndom(d){ return String(d||'').trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction nlabel(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKC'); x=casefold(x); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nname(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKD'); x=x.replace(/\\p{M}/gu,''); x=casefold(x); x=x.replace(/['\\u2019\\u02bc\\u2018]/gu,''); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nameCompare(a,b){\n  const na=nname(a), nb=nname(b); if(!na||!nb) return 'UNUSABLE'; if(na===nb) return 'CONSISTENT';\n  const ta=na.split(' '), tb=nb.split(' ');\n  if(ta.length===tb.length && ta.length>1 && JSON.stringify([...ta].sort())===JSON.stringify([...tb].sort())) return 'UNUSABLE';\n  if(ta.length>=2 && tb.length>=2 && ta[0]===tb[0] && ta[ta.length-1]===tb[tb.length-1]){\n    const ma=ta.slice(1,-1), mb=tb.slice(1,-1);\n    if(ma.length===0||mb.length===0) return 'CONSISTENT';\n    if(ma.length!==mb.length) return 'UNUSABLE';\n    for(let i=0;i<ma.length;i++){ const a=ma[i],b=mb[i]; if(a===b) continue; if(a.length===1&&b.startsWith(a)) continue; if(b.length===1&&a.startsWith(b)) continue; return 'UNUSABLE'; }\n    return 'CONSISTENT';\n  }\n  if(ta.length>=2 && tb.length>=2 && ta[0]!==tb[0] && ta[ta.length-1]!==tb[tb.length-1]) return 'CONFLICT';\n  return 'UNUSABLE';\n}\nfunction isSafePersonUrl(u){\n  if(u==null||u==='') return false; let x=String(u).trim();\n  if(!/^https?:\\/\\//i.test(x)) x='https://'+x;\n  const m = x.match(/^https?:\\/\\/([^\\/?#]+)([^?#]*)/i); if(!m) return false;\n  let host=m[1].toLowerCase().replace(/^www\\./,''); if(host!=='linkedin.com') return false;\n  let path=(m[2]||'').split('?')[0].split('#')[0];\n  const pm=path.match(/^\\/in\\/([^\\/]+)$/i); return !!(pm && pm[1] && pm[1].trim()!=='');\n}\nconst s=$input.first().json||{};const pr=s.profile_result||{};const canonical=s.person.linkedin_url;const req=pr.requested_profile_url;const obs=pr.observed_profile_url;const ok=(nurl(req)!==nurl(canonical))?'CANONICAL_REQUESTED_MISMATCH':(nurl(obs)!==nurl(req)?'OBSERVED_MISMATCH':'PASS');return [{json:Object.assign({},s,{_2c_url_invariant:ok})}];"
+      },
+      "name": "2C - Profile URL Invariant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        128
+      ],
+      "id": "a075d254-4a76-49dc-949e-a8ca253fae81"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2c_url_invariant }}",
+                    "rightValue": "PASS",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2c_url_invariant }}",
+                    "rightValue": "CANONICAL_REQUESTED_MISMATCH",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2c_url_invariant }}",
+                    "rightValue": "OBSERVED_MISMATCH",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 3
+        }
+      },
+      "name": "2C - URL Invariant Check",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -1104,
+        128
+      ],
+      "id": "26fb9be4-2b9a-446a-89a9-1e08a7a8d436"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{};\nconst iev={ status:'FAILED', reason:'PROVIDER_INVALID_RESPONSE', identity:{ mode:'EXACT_LINKEDIN_URL', anchor_status:'VALID', requested_profile_url:s.profile_result?s.profile_result.requested_profile_url:null, observed_profile_url:s.profile_result?s.profile_result.observed_profile_url:null, status:'INVALID_RESPONSE', profile_name_corroboration:'NOT_EVALUATED', profile_observation:null }, provider_candidate_verdict:'NOT_EVALUATED', account_affiliation_status:'NOT_EVALUATED', selected_affiliation:null, observed_current_role_organizations:[], matched_employer_field_conflicts:[], current_title_status:'NOT_EVALUATED', current_title:null, source_url:s.profile_result?s.profile_result.requested_profile_url:null, short_evidence:'PROVIDER_INVALID_RESPONSE', current_roles_considered:[], diagnostics:{ attempts:s.profile_result&&s.profile_result.diagnostics?s.profile_result.diagnostics.attempts:1, http_status:null, error_code:null, retrieved_at:null } };\nreturn [{ json:{ ...s, inbound_employer_verification:iev, matched_employer:null, manual_review:false, manual_review_reason:null, enrichment_status:'failed', result_status:'failed', routing_outcome:'FAILED', _2c_decision:'FAILED' } }];\n"
+      },
+      "name": "2C - Build URL Mismatch Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        304
+      ],
+      "id": "1ad59fbd-02b4-4d86-99be-adc59d162591"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction casefold(s){ return String(s).toLowerCase().replace(/\\u00df/g,'ss').replace(/\\u03c2/g,'\\u03c3'); }\nfunction ndom(d){ return String(d||'').trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction nlabel(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKC'); x=casefold(x); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nname(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKD'); x=x.replace(/\\p{M}/gu,''); x=casefold(x); x=x.replace(/['\\u2019\\u02bc\\u2018]/gu,''); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nameCompare(a,b){\n  const na=nname(a), nb=nname(b); if(!na||!nb) return 'UNUSABLE'; if(na===nb) return 'CONSISTENT';\n  const ta=na.split(' '), tb=nb.split(' ');\n  if(ta.length===tb.length && ta.length>1 && JSON.stringify([...ta].sort())===JSON.stringify([...tb].sort())) return 'UNUSABLE';\n  if(ta.length>=2 && tb.length>=2 && ta[0]===tb[0] && ta[ta.length-1]===tb[tb.length-1]){\n    const ma=ta.slice(1,-1), mb=tb.slice(1,-1);\n    if(ma.length===0||mb.length===0) return 'CONSISTENT';\n    if(ma.length!==mb.length) return 'UNUSABLE';\n    for(let i=0;i<ma.length;i++){ const a=ma[i],b=mb[i]; if(a===b) continue; if(a.length===1&&b.startsWith(a)) continue; if(b.length===1&&a.startsWith(b)) continue; return 'UNUSABLE'; }\n    return 'CONSISTENT';\n  }\n  if(ta.length>=2 && tb.length>=2 && ta[0]!==tb[0] && ta[ta.length-1]!==tb[tb.length-1]) return 'CONFLICT';\n  return 'UNUSABLE';\n}\nfunction isSafePersonUrl(u){\n  if(u==null||u==='') return false; let x=String(u).trim();\n  if(!/^https?:\\/\\//i.test(x)) x='https://'+x;\n  const m = x.match(/^https?:\\/\\/([^\\/?#]+)([^?#]*)/i); if(!m) return false;\n  let host=m[1].toLowerCase().replace(/^www\\./,''); if(host!=='linkedin.com') return false;\n  let path=(m[2]||'').split('?')[0].split('#')[0];\n  const pm=path.match(/^\\/in\\/([^\\/]+)$/i); return !!(pm && pm[1] && pm[1].trim()!=='');\n}\nconst s=$input.first().json||{};const resolved=s.person&&s.person.resolved_name?s.person.resolved_name:null;const pname=s.profile_result&&s.profile_result.profile?s.profile_result.profile.name:null;const c=(!resolved||!pname)?'UNUSABLE':nameCompare(resolved,pname);return [{json:Object.assign({},s,{_2c_name_corroboration:c})}];"
+      },
+      "name": "2C - Profile Name Corroboration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        128
+      ],
+      "id": "1cc946c7-54f2-42bb-bd22-cf32c95a8bef"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2c_name_corroboration }}",
+                    "rightValue": "CONFLICT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "22427ab7-0ac9-44fe-af7d-750abc3ad84c"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "name": "2C - Name Corroboration Check",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -656,
+        128
+      ],
+      "id": "09b3d09c-c0c2-4d33-801f-52bad3520ae6"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{}; const pr=s.profile_result||{};\nconst iev={ status:'UNVERIFIED', reason:'PROFILE_IDENTITY_CONFLICT', identity:{ mode:'EXACT_LINKEDIN_URL', anchor_status:'VALID', requested_profile_url:pr.requested_profile_url||null, observed_profile_url:pr.observed_profile_url||null, status:'PROFILE_IDENTITY_CONFLICT', profile_name_corroboration:'CONFLICT', profile_observation:(pr.profile?{name:pr.profile.name||null,headline:pr.profile.headline||null}:null) }, provider_candidate_verdict:'NOT_EVALUATED', account_affiliation_status:'NOT_EVALUATED', selected_affiliation:null, observed_current_role_organizations:[], matched_employer_field_conflicts:[], current_title_status:'NOT_EVALUATED', current_title:null, source_url:pr.requested_profile_url||null, short_evidence:'PROFILE_IDENTITY_CONFLICT', current_roles_considered:[], diagnostics:{ attempts:pr.diagnostics?pr.diagnostics.attempts:1, http_status:pr.diagnostics?pr.diagnostics.http_status:200, error_code:null, retrieved_at:null } };\nreturn [{ json:{ ...s, inbound_employer_verification:iev, matched_employer:null, manual_review:true, manual_review_reason:'employer_unverified', enrichment_status:'manual_review', result_status:'manual', routing_outcome:'MANUAL_REVIEW', _2c_decision:'UNVERIFIED' } }];\n"
+      },
+      "name": "2C - Build Identity Conflict Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        288
+      ],
+      "id": "cd97febe-0a61-403f-bac8-d22a6d775a2a"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction casefold(s){ return String(s).toLowerCase().replace(/\\u00df/g,'ss').replace(/\\u03c2/g,'\\u03c3'); }\nfunction ndom(d){ return String(d||'').trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction nlabel(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKC'); x=casefold(x); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nname(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKD'); x=x.replace(/\\p{M}/gu,''); x=casefold(x); x=x.replace(/['\\u2019\\u02bc\\u2018]/gu,''); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nameCompare(a,b){\n  const na=nname(a), nb=nname(b); if(!na||!nb) return 'UNUSABLE'; if(na===nb) return 'CONSISTENT';\n  const ta=na.split(' '), tb=nb.split(' ');\n  if(ta.length===tb.length && ta.length>1 && JSON.stringify([...ta].sort())===JSON.stringify([...tb].sort())) return 'UNUSABLE';\n  if(ta.length>=2 && tb.length>=2 && ta[0]===tb[0] && ta[ta.length-1]===tb[tb.length-1]){\n    const ma=ta.slice(1,-1), mb=tb.slice(1,-1);\n    if(ma.length===0||mb.length===0) return 'CONSISTENT';\n    if(ma.length!==mb.length) return 'UNUSABLE';\n    for(let i=0;i<ma.length;i++){ const a=ma[i],b=mb[i]; if(a===b) continue; if(a.length===1&&b.startsWith(a)) continue; if(b.length===1&&a.startsWith(b)) continue; return 'UNUSABLE'; }\n    return 'CONSISTENT';\n  }\n  if(ta.length>=2 && tb.length>=2 && ta[0]!==tb[0] && ta[ta.length-1]!==tb[tb.length-1]) return 'CONFLICT';\n  return 'UNUSABLE';\n}\nfunction isSafePersonUrl(u){\n  if(u==null||u==='') return false; let x=String(u).trim();\n  if(!/^https?:\\/\\//i.test(x)) x='https://'+x;\n  const m = x.match(/^https?:\\/\\/([^\\/?#]+)([^?#]*)/i); if(!m) return false;\n  let host=m[1].toLowerCase().replace(/^www\\./,''); if(host!=='linkedin.com') return false;\n  let path=(m[2]||'').split('?')[0].split('#')[0];\n  const pm=path.match(/^\\/in\\/([^\\/]+)$/i); return !!(pm && pm[1] && pm[1].trim()!=='');\n}\n\nconst s=$input.first().json||{}, pr=s.profile_result||{}, account=s.account_company||{}, candidate=s.matched_employer_candidate||null;\nconst rd=(pr.diagnostics&&pr.diagnostics.retrieval_date)?pr.diagnostics.retrieval_date:null;\nconst nullEndCurrent = !!(pr.adapter_capabilities && pr.adapter_capabilities.null_end_is_current===true);\nconst namespacedSourceIds = (pr.adapter_capabilities && Array.isArray(pr.adapter_capabilities.namespaced_source_ids)) ? pr.adapter_capabilities.namespaced_source_ids : [];\nconst ACCT={name:account.name||null,domain:account.domain?ndom(account.domain):null,linkedin_url:account.linkedin_url||null,apollo_organization_id:(account.provider_refs&&account.provider_refs.apollo_organization_id?String(account.provider_refs.apollo_organization_id).trim():null)||null};\nfunction parseInterval(raw){ if(raw==null)return null; const str=String(raw).trim(); if(!str)return null; const low=str.toLowerCase(); if(low==='present'||low==='current')return {kind:'present'}; let m;\n  if((m=str.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/))){ const y=+m[1],mo=+m[2],d=+m[3]; if(mo<1||mo>12)return {kind:'invalid'}; const last=new Date(Date.UTC(y,mo,0)).getUTCDate(); if(d<1||d>last)return {kind:'invalid'}; return {kind:'interval',start:str,end:str,precision:'DAY'}; }\n  if((m=str.match(/^(\\d{4})-(\\d{2})$/))){ const y=+m[1],mo=+m[2]; if(mo<1||mo>12)return {kind:'invalid'}; const last=new Date(Date.UTC(y,mo,0)).getUTCDate(); return {kind:'interval',start:m[1]+'-'+m[2]+'-01',end:m[1]+'-'+m[2]+'-'+String(last).padStart(2,'0'),precision:'MONTH'}; }\n  if((m=str.match(/^(\\d{4})$/))){ return {kind:'interval',start:m[1]+'-01-01',end:m[1]+'-12-31',precision:'YEAR'}; }\n  return {kind:'invalid'}; }\nfunction evaluateCurrentness(r,rd){ const sr=r.start_date_raw,er=r.end_date_raw,pcs=r.provider_current_status;\n  const s0=(sr!=null&&sr!=='')?parseInterval(sr):null; const e0=(er!=null&&er!=='')?parseInterval(er):null;\n  if((s0&&(s0.kind==='invalid'||s0.kind==='present'))||(e0&&e0.kind==='invalid'))return{currentness:'UNKNOWN',basis:'INVALID_OR_CONTRADICTORY_ROLE_DATES'};\n  const si=(s0&&s0.kind==='interval')?s0:null; const present=(e0&&e0.kind==='present'); const ei=(e0&&e0.kind==='interval')?e0:null;\n  if(si&&ei&&si.start>ei.end)return{currentness:'UNKNOWN',basis:'INVALID_OR_CONTRADICTORY_ROLE_DATES'};\n  let cur=false,clo=false,sb=null; if(pcs===true){cur=true;sb='EXPLICIT_PROVIDER_CURRENT_FLAG';} if(present){cur=true;sb='EXPLICIT_PRESENT_MARKER';}\n  if(pcs===false){clo=true;} else if(er==null&&present===false&&nullEndCurrent){cur=true;sb='PROVIDER_CONTRACT_NULL_END_CURRENT';}\n  if(cur&&clo)return{currentness:'UNKNOWN',basis:'CONFLICTING_CURRENTNESS_SIGNALS'};\n  let st; if(!si)st='START_UNKNOWN'; else if(si.end<=rd)st='STARTED_CONFIRMED'; else if(si.start>rd)st='FUTURE_START'; else st='START_UNKNOWN';\n  let ds=null,db=null;\n  if(st==='FUTURE_START'){ds='FUTURE';db='FUTURE_START_DATE';}\n  else if(ei){ if(ei.end<rd){ds='CLOSED';db='END_DATE_INTERVAL_BEFORE_RETRIEVAL';}\n    else if(st==='STARTED_CONFIRMED'){ if(ei.start>rd){ds='CURRENT';db='END_DATE_INTERVAL_AFTER_RETRIEVAL';}\n      else if(ei.precision==='DAY'&&ei.start===rd){ds='CURRENT';db='END_DATE_INTERVAL_CONTAINS_RETRIEVAL';}\n      else if((ei.precision==='MONTH'||ei.precision==='YEAR')&&ei.start<=rd&&rd<=ei.end){ds='UNKNOWN';db='DATE_PRECISION_OVERLAPS_RETRIEVAL';}\n      else {ds='UNKNOWN';db='MISSING_OR_UNCERTAIN_END';} }\n    else {ds='UNKNOWN';db=(st==='START_UNKNOWN')?'START_DATE_UNRESOLVED':'MISSING_OR_UNCERTAIN_END';} }\n  else {ds='UNKNOWN';db='MISSING_OR_UNCERTAIN_END';}\n  if(st==='FUTURE_START'){ if(cur)return{currentness:'UNKNOWN',basis:'CONFLICTING_CURRENTNESS_SIGNALS'}; return{currentness:'FUTURE',basis:db}; }\n  if(ds==='CLOSED'){ if(cur)return{currentness:'UNKNOWN',basis:'CONFLICTING_CURRENTNESS_SIGNALS'}; return{currentness:'CLOSED',basis:db}; }\n  if(ds==='CURRENT'){ if(clo)return{currentness:'UNKNOWN',basis:'CONFLICTING_CURRENTNESS_SIGNALS'}; return{currentness:'CURRENT',basis:cur?'MULTIPLE_AGREEING_SIGNALS':db}; }\n  if(ds==='FUTURE'){ if(cur)return{currentness:'UNKNOWN',basis:'CONFLICTING_CURRENTNESS_SIGNALS'}; return{currentness:'FUTURE',basis:db}; }\n  if(cur)return{currentness:'CURRENT',basis:sb};\n  if(clo){ if(st==='STARTED_CONFIRMED')return{currentness:'CLOSED',basis:'EXPLICIT_PROVIDER_NOT_CURRENT_FLAG'}; return{currentness:'UNKNOWN',basis:'START_DATE_UNRESOLVED'}; }\n  if(st==='START_UNKNOWN'){ if(si&&(si.precision==='MONTH'||si.precision==='YEAR')&&si.start<=rd&&rd<=si.end)return{currentness:'UNKNOWN',basis:'START_DATE_PRECISION_OVERLAPS_RETRIEVAL'}; return{currentness:'UNKNOWN',basis:'START_DATE_UNRESOLVED'}; }\n  return{currentness:'UNKNOWN',basis:db||'MISSING_OR_UNCERTAIN_END'}; }\nfunction orgCompare(a,b){ const aid=(a.apollo_organization_id||'').trim()||null,bid=(b.apollo_organization_id||'').trim()||null;\n  const ad=ndom(a.domain)||null,bd=ndom(b.domain)||null,au=nurl(a.linkedin_url)||null,bu=nurl(b.linkedin_url)||null,an=nlabel(a.name),bn=nlabel(b.name);\n  if(aid&&bid)return aid===bid?{result:'IDENTITY_MATCH',reason:'STABLE_ID_EQUAL'}:{result:'NO_MATCH',reason:'STRONG_ID_CONFLICT'};\n  if(ad&&bd&&ad!==bd)return{result:'NO_MATCH',reason:'STRONG_IDENTIFIER_CONFLICT'};\n  if(au&&bu&&au!==bu)return{result:'NO_MATCH',reason:'STRONG_IDENTIFIER_CONFLICT'};\n  if(ad&&bd&&ad===bd)return{result:'IDENTITY_MATCH',reason:'DOMAIN_MATCH'};\n  if(au&&bu&&au===bu)return{result:'IDENTITY_MATCH',reason:'COMPANY_LINKEDIN_MATCH'};\n  if(an&&bn&&an===bn)return{result:'LABEL_MATCH',reason:'NAME_LABEL_EQUAL'};\n  return{result:'INSUFFICIENT',reason:'INSUFFICIENT_EVIDENCE'}; }\nfunction namespacedBind(a,b){ const sp=(a.source_provider||''),so=(a.source_organization_id||'').trim(); const sp2=(b.source_provider||''),so2=(b.source_organization_id||'').trim();\n  return (namespacedSourceIds.indexOf(sp)!==-1 && sp===sp2 && so && so2 && so===so2); }\nfunction clusterBinds(a,b){ if(orgCompare(a,b).result==='IDENTITY_MATCH')return true; return namespacedBind(a,b); }\nfunction orgSelectable(o){ return !!((o.name?nlabel(o.name):'')||ndom(o.domain)||nurl(o.linkedin_url)||((o.apollo_organization_id||'').trim())); }\nfunction usableTitle(t){ if(t==null)return null; const raw=String(t).trim().toLowerCase(); if(raw===''||raw==='n/a'||raw==='na'||raw==='unknown'||raw==='-'||raw==='\\u2014')return null; return nlabel(t); }\nfunction roleOrg(r){ const o=r.organization||{}; const pr2=o.provider_refs||{};\n  return {name:o.name||null,domain:o.domain||null,linkedin_url:o.linkedin_url||null,\n    apollo_organization_id:(pr2.apollo_organization_id?String(pr2.apollo_organization_id).trim():null)||null,\n    source_provider:pr2.source_provider||null,\n    source_organization_id:(pr2.source_organization_id?String(pr2.source_organization_id).trim():null)||null}; }\nfunction candOrg(){ if(!candidate)return null; const pr2=candidate.provider_refs||{};\n  return {name:candidate.name||null,domain:candidate.domain||null,linkedin_url:candidate.linkedin_url||null,apollo_organization_id:(pr2.apollo_organization_id?String(pr2.apollo_organization_id).trim():null)||null}; }\nconst CAND=candOrg();\nconst rawRoles=(pr.profile&&Array.isArray(pr.profile.work_history))?pr.profile.work_history:[];\nconst roles=rawRoles.map((w,i)=>{ const org=(w&&w.organization)?w.organization:null;\n  const ns=(w&&w.start_date_raw)?parseInterval(w.start_date_raw):null, ne=(w&&w.end_date_raw)?parseInterval(w.end_date_raw):null;\n  const pcs=(w&&typeof w.provider_current_status==='boolean')?w.provider_current_status:undefined;\n  const cc=evaluateCurrentness({start_date_raw:w&&w.start_date_raw,end_date_raw:w&&w.end_date_raw,provider_current_status:pcs},rd);\n  return { role_index:i, title:(w&&w.title)||null, description:(w&&w.description)||null, organization:org||{},\n    start_date_raw:(w&&w.start_date_raw)||null, end_date_raw:(w&&w.end_date_raw)||null,\n    normalized_start_interval:(ns&&ns.kind==='interval')?{start:ns.start,end:ns.end,precision:ns.precision}:null,\n    normalized_end_interval:(ne&&ne.kind==='interval')?{start:ne.start,end:ne.end,precision:ne.precision}:null,\n    currentness:cc.currentness, currentness_basis:cc.basis }; });\nconst currentRoles=roles.filter(r=>r.currentness==='CURRENT');\nconst unknownRoles=roles.filter(r=>r.currentness==='UNKNOWN');\nconst closedRoles=roles.filter(r=>r.currentness==='CLOSED');\nfunction canonicalizable(o){ return !!(o.name||ndom(o.domain)||nurl(o.linkedin_url)||((o.apollo_organization_id&&o.apollo_organization_id.trim()))); }\nfunction markClusterMerge(clusterRoles, conflictsOut){ const orgs=clusterRoles.map(roleOrg); const m={name:null,domain:null,linkedin_url:null,apollo_organization_id:null};\n  const aids=orgs.map(o=>o.apollo_organization_id).filter(x=>x&&x!==''); if(aids.length>0&&aids.every(x=>x===aids[0]))m.apollo_organization_id=aids[0]; else if(aids.length>1){m.apollo_organization_id=null;conflictsOut.push({field:'apollo_organization_id',normalized_values:aids,source_role_indexes:clusterRoles.map(r=>r.role_index),account_value:null,resolution:'CANONICAL_NULL_CONFLICT'});}\n  const doms=orgs.map(o=>ndom(o.domain)).filter(x=>x); if(doms.length>0&&doms.every(x=>x===doms[0]))m.domain=doms[0]; else if(doms.length>1){m.domain=null;conflictsOut.push({field:'domain',normalized_values:doms,source_role_indexes:clusterRoles.map(r=>r.role_index),account_value:null,resolution:'CANONICAL_NULL_CONFLICT'});}\n  const urls=orgs.map(o=>nurl(o.linkedin_url)).filter(x=>x); if(urls.length>0&&urls.every(x=>x===urls[0]))m.linkedin_url=urls[0]; else if(urls.length>1){m.linkedin_url=null;conflictsOut.push({field:'linkedin_url',normalized_values:urls,source_role_indexes:clusterRoles.map(r=>r.role_index),account_value:null,resolution:'CANONICAL_NULL_CONFLICT'});}\n  const names=orgs.map(o=>nlabel(o.name)).filter(x=>x); if(names.length>0&&names.every(x=>x===names[0])){ const lowest=clusterRoles.slice().sort((a,b)=>a.role_index-b.role_index)[0]; m.name=roleOrg(lowest).name; }\n  else if(names.length>1){m.name=null;conflictsOut.push({field:'name',normalized_values:names,source_role_indexes:clusterRoles.map(r=>r.role_index),account_value:null,resolution:'CANONICAL_NULL_CONFLICT'});}\n  return m; }\nfunction accountFieldConflicts(accountObj, roleOrgs){ const out=[]; const acctDom=ndom(accountObj.domain)||null,acctUrl=nurl(accountObj.linkedin_url)||null,acctName=nlabel(accountObj.name);\n  for(const r of roleOrgs){ const o=roleOrg(r);\n    const rDom=ndom(o.domain)||null,rUrl=nurl(o.linkedin_url)||null,rName=nlabel(o.name);\n    if(rDom&&acctDom&&rDom!==acctDom)out.push({field:'domain',normalized_values:[rDom],source_role_indexes:[r.role_index],account_value:accountObj.domain||null,resolution:'ACCOUNT_CANONICAL_WINS'});\n    if(rUrl&&acctUrl&&rUrl!==acctUrl)out.push({field:'linkedin_url',normalized_values:[rUrl],source_role_indexes:[r.role_index],account_value:accountObj.linkedin_url||null,resolution:'ACCOUNT_CANONICAL_WINS'});\n    if(rName&&acctName&&rName!==acctName)out.push({field:'name',normalized_values:[rName],source_role_indexes:[r.role_index],account_value:accountObj.name||null,resolution:'ACCOUNT_CANONICAL_WINS'}); }\n  return out; }\nfunction targetOrg(tr){ if(!tr)return null; const pr3=tr.provider_refs||{};\n  let aid=(pr3.apollo_organization_id?String(pr3.apollo_organization_id).trim():null)||null;\n  const sp=pr3.source_provider||tr.source_provider||null;\n  const oid=(pr3.organization_id||tr.organization_id)?String(pr3.organization_id||tr.organization_id).trim():null;\n  if(!aid && sp==='apollo' && oid){ aid=oid; }\n  const so=(pr3.source_organization_id||tr.source_organization_id)?String(pr3.source_organization_id||tr.source_organization_id).trim():null;\n  return { name:tr.name||null, domain:tr.domain||null, linkedin_url:tr.linkedin_url||null, apollo_organization_id:aid, source_provider:sp, source_organization_id:so }; }\nfunction embeddedEvidence(r, acctCompareResult, headlineMarker){ const t=((r.title||'')+' '+(r.description||'')).toLowerCase();\n  const MK=/(\\bvia\\b|\\bon behalf of\\b|\\bembedded\\b|\\bseconded\\b|\\bcontractor\\b|\\bfreelance\\b|\\binterim\\b)/;\n  const titleMarker = MK.test((r.title||'').toLowerCase());\n  const descMarker = MK.test((r.description||'').toLowerCase());\n  const marker = titleMarker || descMarker || (headlineMarker===true);\n  const source_field = titleMarker ? 'title' : (descMarker ? 'description' : (headlineMarker===true ? 'headline' : null));\n  const tr=(r.organization&&r.organization.target_reference)?r.organization.target_reference:null;\n  if(acctCompareResult==='IDENTITY_MATCH'&&marker){ return {status:'VERIFIED',marker:'EMBEDDED',source_field:source_field,target_reference:null,target_comparison:{result:'NOT_APPLICABLE',reason:'direct_account_role'}}; }\n  if(acctCompareResult==='IDENTITY_MATCH'&&!marker){ return {status:'NOT_APPLICABLE',marker:null,source_field:null,target_reference:null,target_comparison:{result:'NOT_APPLICABLE',reason:'direct_account_role_no_marker'}}; }\n  if(marker&&tr){ const tro=targetOrg(tr); const cmp=orgCompare(tro,ACCT);\n    if(cmp.result==='IDENTITY_MATCH')return {status:'VERIFIED',marker:'EMBEDDED',source_field:source_field,target_reference:tr,target_comparison:{result:'IDENTITY_MATCH',reason:cmp.reason}};\n    return {status:'SUPPORTING_ONLY',marker:'EMBEDDED',source_field:source_field,target_reference:tr,target_comparison:{result:cmp.result,reason:cmp.reason}}; }\n  if(marker){ return {status:'SUPPORTING_ONLY',marker:'EMBEDDED',source_field:source_field,target_reference:null,target_comparison:{result:'INSUFFICIENT',reason:'no_identity_grade_target_reference'}}; }\n  return {status:'NOT_APPLICABLE',marker:null,source_field:null,target_reference:null,target_comparison:{result:'NOT_APPLICABLE',reason:'no_embedded_marker'}}; }\n\n\nconst conflicts=[];\nconst directRoles=currentRoles.filter(r=>orgCompare(roleOrg(r),ACCT).result==='IDENTITY_MATCH');\nlet selection=null, matched_employer=null, accountStatus=null, candidateVerdict=null, titleStatus=null, currentTitleVal=null, decision=null, shortEvidence=null, verdictReason=null;\nconst MARKER_RE=/(\\bvia\\b|\\bon behalf of\\b|\\bembedded\\b|\\bseconded\\b|\\bcontractor\\b|\\bfreelance\\b|\\binterim\\b)/;\nconst headlineText=(pr.profile&&pr.profile.headline)?String(pr.profile.headline):null;\nconst headlineHasMarker=headlineText?MARKER_RE.test(headlineText.toLowerCase()):false;\nconst usableCurCount=currentRoles.filter(r=>orgSelectable(roleOrg(r))).length;\nconst headlineMarkerEffective=(headlineHasMarker && usableCurCount===1);\ns._2c_cluster_map={};\nconst setClusterReason=(ri,reason)=>{ s._2c_cluster_map[String(ri)]={cluster_id:null,reason:reason}; };\nconst embeddedAccountRoles = directRoles.filter(r=>embeddedEvidence(r,'IDENTITY_MATCH',headlineMarkerEffective).status==='VERIFIED');\nif(embeddedAccountRoles.length>0){ selection={basis:'ACCOUNT_EMBEDDED_AFFILIATION',roles:embeddedAccountRoles};\n  matched_employer={name:account.name||null,domain:account.domain?ndom(account.domain):null,linkedin_url:account.linkedin_url||null,provider_refs:{apollo_organization_id:ACCT.apollo_organization_id},affiliation_type:'CURRENT_FOR_TARGET',selection_basis:'ACCOUNT_EMBEDDED_AFFILIATION',identity_binding:'EXPLICIT_ACCOUNT_AFFILIATION',verification_basis:'VERIFIED_EMBEDDED_ACCOUNT_AFFILIATION'};\n  conflicts.push.apply(conflicts, accountFieldConflicts(ACCT, embeddedAccountRoles));\n  accountStatus='CURRENT_FOR_TARGET';\n  currentRoles.forEach(r=>{ setClusterReason(r.role_index, embeddedAccountRoles.some(x=>x.role_index===r.role_index)?'EMBEDDED_ACCOUNT_SELECTED':'NOT_SELECTED_EMBEDDED_PRECEDENCE'); }); }\nelse if(directRoles.length>0){ selection={basis:'ACCOUNT_DIRECT_CURRENT_ROLE',roles:directRoles};\n  matched_employer={name:account.name||null,domain:account.domain?ndom(account.domain):null,linkedin_url:account.linkedin_url||null,provider_refs:{apollo_organization_id:ACCT.apollo_organization_id},affiliation_type:'DIRECT_CURRENT',selection_basis:'ACCOUNT_DIRECT_CURRENT_ROLE',identity_binding:'IDENTITY_BOUND',verification_basis:'VERIFIED_CURRENT_ROLE'};\n  conflicts.push.apply(conflicts, accountFieldConflicts(ACCT, directRoles));\n  accountStatus='DIRECT_CURRENT';\n  currentRoles.forEach(r=>{ setClusterReason(r.role_index, directRoles.some(x=>x.role_index===r.role_index)?'ACCOUNT_DIRECT_SELECTED':'NOT_SELECTED_ACCOUNT_PRECEDENCE'); }); }\nelse { const embeddedOtherRoles = currentRoles.filter(r=>embeddedEvidence(r, orgCompare(roleOrg(r),ACCT).result, headlineMarkerEffective).status==='VERIFIED');\n  if(embeddedOtherRoles.length>0){ selection={basis:'ACCOUNT_EMBEDDED_AFFILIATION',roles:embeddedOtherRoles};\n    matched_employer={name:account.name||null,domain:account.domain?ndom(account.domain):null,linkedin_url:account.linkedin_url||null,provider_refs:{apollo_organization_id:ACCT.apollo_organization_id},affiliation_type:'CURRENT_FOR_TARGET',selection_basis:'ACCOUNT_EMBEDDED_AFFILIATION',identity_binding:'EXPLICIT_ACCOUNT_AFFILIATION',verification_basis:'VERIFIED_EMBEDDED_ACCOUNT_AFFILIATION'};\n    conflicts.push.apply(conflicts, accountFieldConflicts(ACCT, embeddedOtherRoles));\n    accountStatus='CURRENT_FOR_TARGET';\n    currentRoles.forEach(r=>{ setClusterReason(r.role_index, embeddedOtherRoles.some(x=>x.role_index===r.role_index)?'EMBEDDED_ACCOUNT_SELECTED':'NOT_SELECTED_EMBEDDED_PRECEDENCE'); }); }\n  else { const usable=currentRoles.filter(r=>orgSelectable(roleOrg(r))); const unresolved=currentRoles.filter(r=>!orgSelectable(roleOrg(r)));\n    const clusterIdOf={}; const clusters=[]; const used=new Set(); let cid=0;\n    for(const r0 of usable){ if(used.has(r0.role_index))continue; const anchor=roleOrg(r0);\n      let members=usable.filter(r=>r.role_index!==r0.role_index&&!used.has(r.role_index)&&clusterBinds(anchor,roleOrg(r)));\n      let pairOk=true; const all=[r0].concat(members);\n      for(let i=0;i<all.length&&pairOk;i++)for(let j=i+1;j<all.length&&pairOk;j++){ const cpc=orgCompare(roleOrg(all[i]),roleOrg(all[j])); if(cpc.result==='NO_MATCH')pairOk=false; }\n      if(!pairOk){ members=[]; }\n      const cluster=[r0].concat(members); const cidStr='cluster_'+(++cid);\n      clusters.push(cluster); cluster.forEach(r=>{ used.add(r.role_index); clusterIdOf[r.role_index]=cidStr; }); }\n    for(const r of usable){ if(!used.has(r.role_index)){ clusters.push([r]); const cidStr='cluster_'+(++cid); used.add(r.role_index); clusterIdOf[r.role_index]=cidStr; } }\n    // every CURRENT role gets cluster id or explicit null\n    const roleClusterId=(ri)=>(clusterIdOf[ri]!==undefined?clusterIdOf[ri]:null);\n    const roleClusterReason=(ri)=>{ if(clusterIdOf[ri]!==undefined)return 'IDENTITY_BOUND_TO_CLUSTER_ANCHOR'; const r=currentRoles.find(x=>x.role_index===ri); if(!r)return 'NOT_CURRENT_ROLE'; if(!orgSelectable(roleOrg(r)))return 'UNRESOLVED_ORGANIZATION_NOT_SELECTABLE'; return 'CLUSTER_MEMBERSHIP_FAILED'; };\n    if(unresolved.length>0){ selection=null; accountStatus='UNKNOWN'; }\n    else if(clusters.length===1&&clusters[0].length===1){ selection={basis:'SINGLE_CURRENT_ORGANIZATION',roles:clusters[0]};\n      const o=roleOrg(clusters[0][0]); const identityBound=!!(ndom(o.domain)||nurl(o.linkedin_url)||((o.apollo_organization_id&&o.apollo_organization_id.trim())));\n      matched_employer={name:o.name||null,domain:ndom(o.domain)||null,linkedin_url:o.linkedin_url||null,provider_refs:{apollo_organization_id:(o.apollo_organization_id&&o.apollo_organization_id.trim())||null},affiliation_type:'DIRECT_CURRENT',selection_basis:'SINGLE_CURRENT_ORGANIZATION',identity_binding:identityBound?'IDENTITY_BOUND':'OBSERVED_LABEL_ONLY',verification_basis:'VERIFIED_CURRENT_ROLE'};\n      accountStatus='UNKNOWN'; }\n    else if(clusters.length===1&&clusters[0].length>=2){ selection={basis:'SAME_ENTITY_MULTI_ROLE',roles:clusters[0]}; const m=markClusterMerge(clusters[0], conflicts);\n      if(!canonicalizable(m)){selection=null;accountStatus='UNKNOWN';}\n      else matched_employer={name:m.name||null,domain:m.domain||null,linkedin_url:m.linkedin_url||null,provider_refs:{apollo_organization_id:m.apollo_organization_id||null},affiliation_type:'DIRECT_CURRENT',selection_basis:'SAME_ENTITY_MULTI_ROLE',identity_binding:'IDENTITY_BOUND',verification_basis:'VERIFIED_CURRENT_ROLE'};\n      accountStatus='UNKNOWN'; }\n    else { selection=null; accountStatus='UNKNOWN'; }\n    // store cluster audit on state\n    s._2c_cluster_map = {}; currentRoles.forEach(r=>{ s._2c_cluster_map[String(r.role_index)] = { cluster_id: roleClusterId(r.role_index), reason: roleClusterReason(r.role_index) }; }); } }\n\nif(!candidateVerdict){ if(!CAND)candidateVerdict='NOT_APPLICABLE';\n  else { const cur=currentRoles.some(r=>orgCompare(roleOrg(r),CAND).result==='IDENTITY_MATCH'); const cl=closedRoles.some(r=>orgCompare(roleOrg(r),CAND).result==='IDENTITY_MATCH'); const unk=unknownRoles.some(r=>orgCompare(roleOrg(r),CAND).result==='IDENTITY_MATCH');\n    candidateVerdict = cur?'CURRENT':(cl&&!unk?'NOT_CURRENT':'UNKNOWN'); } }\nif(\n  accountStatus!=='DIRECT_CURRENT' &&\n  accountStatus!=='CURRENT_FOR_TARGET'\n){\n  const ac=closedRoles.some(\n    r=>orgCompare(roleOrg(r),ACCT).result==='IDENTITY_MATCH'\n  );\n\n  const au=unknownRoles.some(\n    r=>orgCompare(roleOrg(r),ACCT).result==='IDENTITY_MATCH'\n  );\n\n  accountStatus=\n    au\n      ? 'UNKNOWN'\n      : (ac ? 'NOT_CURRENT' : 'UNKNOWN');\n}\nif(selection&&matched_employer){ const selRoles=selection.roles; const titles=selRoles.map(r=>usableTitle(r.title)).filter(t=>t!==null); const distinct=titles.filter((t,i)=>titles.indexOf(t)===i);\n  if(distinct.length===0){titleStatus='UNAVAILABLE';currentTitleVal=null;}\n  else if(distinct.length===1){ titleStatus='VERIFIED'; const win=distinct[0]; const carrying=selRoles.filter(r=>usableTitle(r.title)===win).sort((a,b)=>a.role_index-b.role_index)[0]; currentTitleVal=carrying.title; }\n  else {titleStatus='AMBIGUOUS';currentTitleVal=null;}\n  currentTitleVal=titleStatus==='VERIFIED'?currentTitleVal:null; decision='VERIFIED';\n  shortEvidence = selection.basis==='ACCOUNT_DIRECT_CURRENT_ROLE'?'VERIFIED_ACCOUNT_DIRECT_AFFILIATION':(selection.basis==='ACCOUNT_EMBEDDED_AFFILIATION'?'VERIFIED_ACCOUNT_EMBEDDED_AFFILIATION':'VERIFIED_OTHER_CURRENT_AFFILIATION'); }\nelse { titleStatus='NOT_EVALUATED'; currentTitleVal=null; const unresolvedCur=currentRoles.filter(r=>!orgSelectable(roleOrg(r)));\n  if(unresolvedCur.length>0){decision='UNVERIFIED';shortEvidence='CURRENT_ROLE_ORGANIZATION_UNRESOLVED';verdictReason='CURRENT_ROLE_ORGANIZATION_UNRESOLVED';}\n  else if(unknownRoles.length>0){decision='UNVERIFIED';shortEvidence='CURRENT_ROLE_CURRENTNESS_UNRESOLVED';verdictReason='CURRENT_ROLE_CURRENTNESS_UNRESOLVED';}\n  else if(currentRoles.length===0){decision='UNVERIFIED';shortEvidence='NO_USABLE_CURRENT_ROLE';verdictReason='NO_USABLE_CURRENT_ROLE';}\n  else {decision='AMBIGUOUS';shortEvidence='MULTIPLE_CURRENT_AFFILIATIONS';verdictReason='MULTIPLE_CURRENT_AFFILIATIONS';} }\nconst cMap = s._2c_cluster_map || {};\nconst observed=currentRoles.map(r=>{ const o=roleOrg(r); return {name:o.name||null,domain:ndom(o.domain)||null,linkedin_url:o.linkedin_url||null,provider_refs:{apollo_organization_id:(o.apollo_organization_id&&o.apollo_organization_id.trim())||null},identity_binding:(ndom(o.domain)||nurl(o.linkedin_url)||((o.apollo_organization_id&&o.apollo_organization_id.trim())))?'IDENTITY_BOUND':'OBSERVED_LABEL_ONLY',source_role_indexes:[r.role_index]}; });\nconst considered=roles.map(r=>{ const o=roleOrg(r); const ac=orgCompare(o,ACCT);\n  const cm = cMap[String(r.role_index)];\n  const evv = embeddedEvidence(r, ac.result, headlineMarkerEffective);\n  return { role_index:r.role_index, role_observation:{ title:r.title, description:r.description, organization:{name:r.organization.name||null,domain:r.organization.domain||null,linkedin_url:r.organization.linkedin_url||null,provider_refs:r.organization.provider_refs||null}, start_date_raw:r.start_date_raw, end_date_raw:r.end_date_raw, normalized_start_interval:r.normalized_start_interval, normalized_end_interval:r.normalized_end_interval, currentness:r.currentness, currentness_basis:r.currentness_basis }, account_comparison:{result:ac.result,reason:ac.reason}, provider_candidate_comparison:{result:CAND?orgCompare(o,CAND).result:'NOT_APPLICABLE',reason:CAND?orgCompare(o,CAND).reason:'NOT_APPLICABLE'}, embedded_account_evidence:evv, selection_eligibility: r.currentness==='CURRENT'?(orgSelectable(o)?'ELIGIBLE_CURRENT':'INELIGIBLE_UNUSABLE_ORGANIZATION'):(r.currentness==='CLOSED'?'INELIGIBLE_CLOSED':(r.currentness==='FUTURE'?'INELIGIBLE_FUTURE':'INELIGIBLE_UNKNOWN')), organization_cluster_id: (r.currentness==='CURRENT'?(cm?cm.cluster_id:null):null), cluster_decision_reason: (r.currentness==='CURRENT'?(cm?cm.reason:'UNRESOLVED_ORGANIZATION_NOT_SELECTABLE'):null), selected:!!(selection&&selection.roles.some(x=>x.role_index===r.role_index)) }; });\nlet selectedAff=null; if(decision==='VERIFIED'&&matched_employer){ selectedAff={type:matched_employer.affiliation_type,selection_basis:matched_employer.selection_basis,title:titleStatus==='VERIFIED'?currentTitleVal:null,organization:{name:matched_employer.name||null,domain:matched_employer.domain||null,linkedin_url:matched_employer.linkedin_url||null}}; }\nconst iev={ status:decision, reason:verdictReason||shortEvidence, identity:{ mode:(s._2c_url_invariant==='PASS')?'EXACT_LINKEDIN_URL':'NOT_EVALUATED', anchor_status:'VALID', requested_profile_url:pr.requested_profile_url||null, observed_profile_url:pr.observed_profile_url||null, status:'MATCH', profile_name_corroboration:s._2c_name_corroboration||'UNUSABLE', profile_observation:pr.profile?{name:pr.profile.name||null,headline:pr.profile.headline||null}:null }, provider_candidate_verdict:candidateVerdict||'NOT_APPLICABLE', account_affiliation_status:accountStatus||'NOT_EVALUATED', selected_affiliation:selectedAff, observed_current_role_organizations:observed, matched_employer_field_conflicts:conflicts, current_title_status:titleStatus, current_title:currentTitleVal, source_url:pr.requested_profile_url||null, short_evidence:shortEvidence, current_roles_considered:considered, diagnostics:{ attempts:pr.diagnostics?pr.diagnostics.attempts:1, http_status:pr.diagnostics?pr.diagnostics.http_status:200, error_code:null, retrieved_at:pr.diagnostics?pr.diagnostics.retrieved_at:null } };\nconst newPerson = s.person ? Object.assign({},s.person,{current_title:currentTitleVal}) : s.person;\nconst out=Object.assign({},s,{inbound_employer_verification:iev,matched_employer:matched_employer,person:newPerson});\ndelete out._2c_cluster_map;\nif(decision==='VERIFIED'){ out.manual_review=false; out.manual_review_reason=null; out.enrichment_status='processing'; out.result_status='pending'; out.routing_outcome=null; }\nelse if(decision==='UNVERIFIED'){ out.manual_review=true; out.manual_review_reason='employer_unverified'; out.enrichment_status='manual_review'; out.result_status='manual'; out.routing_outcome='MANUAL_REVIEW'; }\nelse if(decision==='AMBIGUOUS'){ out.manual_review=true; out.manual_review_reason='employer_ambiguous'; out.enrichment_status='manual_review'; out.result_status='manual'; out.routing_outcome='MANUAL_REVIEW'; }\nelse { out.manual_review=false; out.manual_review_reason=null; out.enrichment_status='failed'; out.result_status='failed'; out.routing_outcome='FAILED'; }\nout._2c_decision=decision; return [{ json:out }];\n"
+      },
+      "name": "2C - Employment Engine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        -64
+      ],
+      "id": "d25fcd6b-910b-420a-9b2f-6807f52111a2"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{}; const d=s._2c_decision; const st=s.inbound_employer_verification?s.inbound_employer_verification.status:null;\nfunction ok(){\n  if(d==='VERIFIED')return st==='VERIFIED'&&s.matched_employer!==null&&s.person!==null&&s.manual_review===false&&s.manual_review_reason===null&&s.enrichment_status==='processing'&&s.result_status==='pending'&&s.routing_outcome===null;\n  if(d==='SKIPPED')return st==='SKIPPED'&&s.matched_employer===null&&s.manual_review===false&&s.manual_review_reason===null&&s.enrichment_status==='processing'&&s.result_status==='pending'&&s.routing_outcome===null;\n  if(d==='UNVERIFIED')return st==='UNVERIFIED'&&s.matched_employer===null&&s.manual_review===true&&s.manual_review_reason==='employer_unverified'&&s.enrichment_status==='manual_review'&&s.result_status==='manual'&&s.routing_outcome==='MANUAL_REVIEW';\n  if(d==='AMBIGUOUS')return st==='AMBIGUOUS'&&s.matched_employer===null&&s.manual_review===true&&s.manual_review_reason==='employer_ambiguous'&&s.enrichment_status==='manual_review'&&s.result_status==='manual'&&s.routing_outcome==='MANUAL_REVIEW';\n  if(d==='FAILED')return st==='FAILED'&&s.enrichment_status==='failed'&&s.result_status==='failed'&&s.routing_outcome==='FAILED';\n  return false; }\nlet out;\nif(ok()){ out = Object.assign({},s,{dispatch:d}); }\nelse {\n  const iev={ status:'FAILED', reason:'INTERNAL_CONTRACT_ERROR', identity:{ mode:'NOT_EVALUATED', anchor_status:'NOT_EVALUATED', requested_profile_url:null, observed_profile_url:null, status:'NOT_EVALUATED', profile_name_corroboration:'NOT_EVALUATED', profile_observation:null }, provider_candidate_verdict:'NOT_EVALUATED', account_affiliation_status:'NOT_EVALUATED', selected_affiliation:null, observed_current_role_organizations:[], matched_employer_field_conflicts:[], current_title_status:'NOT_EVALUATED', current_title:null, source_url:null, short_evidence:'INTERNAL_CONTRACT_ERROR', current_roles_considered:[], diagnostics:{ attempts:0, http_status:null, error_code:null, retrieved_at:null } };\n  out = Object.assign({},s,{ inbound_employer_verification:iev, matched_employer:null, manual_review:false, manual_review_reason:null, enrichment_status:'failed', result_status:'failed', routing_outcome:'FAILED', dispatch:'FAILED', _2c_decision:'FAILED' });\n}\nreturn [{ json:out }];\n"
+      },
+      "name": "2C - Final Conformance Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        -448
+      ],
+      "id": "00478f52-c3ec-4c59-ad39-c82bffc401a1"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.dispatch }}",
+                    "rightValue": "VERIFIED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.dispatch }}",
+                    "rightValue": "SKIPPED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.dispatch }}",
+                    "rightValue": "UNVERIFIED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.dispatch }}",
+                    "rightValue": "AMBIGUOUS",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.dispatch }}",
+                    "rightValue": "FAILED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 5
+        }
+      },
+      "name": "2C - Branch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -224,
+        128
+      ],
+      "id": "855f70c1-76ff-437b-a611-b66e65144aaa"
+    },
+    {
+      "parameters": {},
+      "name": "2C - Continue to 2D Gate",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        -224
+      ],
+      "id": "bb62e00c-e71b-424d-b173-49e02063b58e"
+    },
+    {
+      "parameters": {},
+      "name": "2C - Continue Account-Level",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        80
+      ],
+      "id": "137df548-ce24-4718-bf56-54b1a976e67d"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{}; const recordId=s.airtable_record_id||s.recordId||'';\nconst body={ fields:{\n  \"Domain Status\":s.domain_status,\"Is Personal Domain\":s.is_personal_domain,\"Is Role Inbox\":s.is_role_inbox,\"Name Quality\":s.name_quality,\"Name Quality Reason\":s.name_quality_reason,\n  \"Account Resolution Status\":s.account_resolution_status,\"Account Resolution Reason\":s.account_resolution_reason,\"Account Resolution\":s.account_resolution?JSON.stringify(s.account_resolution):null,\"Account Company\":s.account_company?JSON.stringify(s.account_company):null,\"Account Candidates\":Array.isArray(s.account_candidates)?JSON.stringify(s.account_candidates):null,\"Company Context\":s.company_context?JSON.stringify(s.company_context):null,\"Provider Diagnostics\":s.provider_diagnostics?JSON.stringify(s.provider_diagnostics):null,\n  \"Person Resolution Status\":s.person_resolution_status,\"Person Resolution Reason\":s.person_resolution_reason,\"Person Resolution Evidence\":s.person_resolution_evidence?JSON.stringify(s.person_resolution_evidence):null,\"Matched Employer Candidate\":s.matched_employer_candidate?JSON.stringify(s.matched_employer_candidate):null,\n  \"Inbound Employer Verification\":s.inbound_employer_verification?JSON.stringify(s.inbound_employer_verification):null,\"Matched Employer\":s.matched_employer?JSON.stringify(s.matched_employer):null,\"Person\":s.person?JSON.stringify(s.person):null,\n  \"Manual Review Needed\":s.manual_review,\"Manual Review Reason\":s.manual_review_reason,\"Enrichment Status\":s.enrichment_status,\"Result Status\":s.result_status,\"Routing Outcome\":s.routing_outcome } };\nreturn [{ json:{ method:'PATCH',url:'https://api.airtable.com/v0/appn5d5Ca7g9IyNMf/tblnUG3bEN2QqyKT4/'+recordId, body:body, _2c_pre:s } }];\n"
+      },
+      "name": "2C - Pack Terminal Persist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        240
+      ],
+      "id": "c3799bd2-3730-41e6-a9f8-cbb079e09969"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "aNAdZLwDzBb7oHe5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/aNAdZLwDzBb7oHe5",
+          "cachedResultName": "Airtable Request Retry (transient-only)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "2C - Persist",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        240
+      ],
+      "retryOnFail": false,
+      "id": "022a517e-96bb-4da0-94c2-0470fe233e2f",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "name": "2C - Terminal Stop",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        672,
+        192
+      ],
+      "id": "0ce7042a-2e7f-4f51-8ead-1213b653dd4f"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst pre=$('2C - Pack Terminal Persist').first().json._2c_pre||($('2C - Input').first().json||{});\nconst iev=(pre.inbound_employer_verification?Object.assign({},pre.inbound_employer_verification,{status:'FAILED',reason:'PERSISTENCE_FAILURE'}):{status:'FAILED',reason:'PERSISTENCE_FAILURE'});\nconst out=Object.assign({},pre,{ manual_review:false, manual_review_reason:null, enrichment_status:'failed', result_status:'failed', routing_outcome:'FAILED', persistence_failure:{failed_at:new Date().toISOString(), reason:'terminal_persistence_failed', after_retry_policy:true}, inbound_employer_verification:iev });\nreturn [{ json: out }];\n"
+      },
+      "name": "2C - Terminal Persist Failed (global, no recursive write)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        320
+      ],
+      "id": "7de654eb-a71c-485a-8d4c-77cd412235d5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json._2c_precall_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "2C - Pre-Call URL Invariant?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -2224,
+        -96
+      ],
+      "id": "a0be3741-0911-4d34-84d3-76d8ccb44ec1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s=$input.first().json||{};const iev={ status:'FAILED', reason:'INTERNAL_CONTRACT_ERROR', identity:{ mode:'NOT_EVALUATED', anchor_status:'NOT_EVALUATED', requested_profile_url:null, observed_profile_url:null, status:'NOT_EVALUATED', profile_name_corroboration:'NOT_EVALUATED', profile_observation:null }, provider_candidate_verdict:'NOT_EVALUATED', account_affiliation_status:'NOT_EVALUATED', selected_affiliation:null, observed_current_role_organizations:[], matched_employer_field_conflicts:[], current_title_status:'NOT_EVALUATED', current_title:null, source_url:null, short_evidence:'INTERNAL_CONTRACT_ERROR', current_roles_considered:[], diagnostics:{ attempts:0, http_status:null, error_code:null, retrieved_at:null } };return [{json:Object.assign({},s,{inbound_employer_verification:iev,matched_employer:null,manual_review:false,manual_review_reason:null,enrichment_status:'failed',result_status:'failed',routing_outcome:'FAILED',_2c_decision:'FAILED'})}];"
+      },
+      "name": "2C - Build Pre-Call Contract Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1968,
+        192
+      ],
+      "id": "4e7db7e0-b42c-497b-ab9a-51551dc1baa1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pre = $('2C - Pack Terminal Persist').first().json._2c_pre;\n\nif (!pre || typeof pre !== 'object') {\n  throw new Error('Missing _2c_pre after successful terminal persistence');\n}\n\nreturn [{ json: pre }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "c27fe7ec-71c1-438e-bfa8-64debcce2205",
+      "name": "2C - Restore Terminal State"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2C - Input": {
+      "main": [
+        [
+          {
+            "node": "2C - Upstream Contract Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Upstream Contract Gate": {
+      "main": [
+        [
+          {
+            "node": "2C - Gate Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Gate Passed?": {
+      "main": [
+        [
+          {
+            "node": "2C - Eligibility",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Build Contract Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Build Contract Error": {
+      "main": [
+        [
+          {
+            "node": "2C - Pack Terminal Persist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Eligibility": {
+      "main": [
+        [
+          {
+            "node": "2C - Eligibility Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Eligibility Branch": {
+      "main": [
+        [
+          {
+            "node": "2C - Validate Profile Anchor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Build Skip Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Build Skip Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Build Skip Outcome": {
+      "main": [
+        [
+          {
+            "node": "2C - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Validate Profile Anchor": {
+      "main": [
+        [
+          {
+            "node": "2C - Anchor Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Anchor Decision": {
+      "main": [
+        [
+          {
+            "node": "2C - Prepare Exact Profile Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Build No/Invalid Anchor Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Build No/Invalid Anchor Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Build No/Invalid Anchor Outcome": {
+      "main": [
+        [
+          {
+            "node": "2C - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Prepare Exact Profile Request": {
+      "main": [
+        [
+          {
+            "node": "2C - Pre-Call URL Invariant?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Exact Profile Provider": {
+      "main": [
+        [
+          {
+            "node": "2C - Profile Adapter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Profile Retry Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Profile Adapter": {
+      "main": [
+        [
+          {
+            "node": "2C - Profile Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Profile Retry Classifier": {
+      "main": [
+        [
+          {
+            "node": "2C - Profile Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Profile Retry?": {
+      "main": [
+        [
+          {
+            "node": "2C - Profile Retry Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Profile Error Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Profile Retry Wait": {
+      "main": [
+        [
+          {
+            "node": "2C - Exact Profile Provider",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Profile Error Result": {
+      "main": [
+        [
+          {
+            "node": "2C - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Invalid Response Result": {
+      "main": [
+        [
+          {
+            "node": "2C - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Profile Status": {
+      "main": [
+        [
+          {
+            "node": "2C - Profile URL Invariant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Build No Profile Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Profile Retry Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Profile Error Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Invalid Response Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Build No Profile Outcome": {
+      "main": [
+        [
+          {
+            "node": "2C - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Profile URL Invariant": {
+      "main": [
+        [
+          {
+            "node": "2C - URL Invariant Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - URL Invariant Check": {
+      "main": [
+        [
+          {
+            "node": "2C - Profile Name Corroboration",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Build URL Mismatch Failure",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Build URL Mismatch Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Build URL Mismatch Failure": {
+      "main": [
+        [
+          {
+            "node": "2C - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Profile Name Corroboration": {
+      "main": [
+        [
+          {
+            "node": "2C - Name Corroboration Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Name Corroboration Check": {
+      "main": [
+        [
+          {
+            "node": "2C - Build Identity Conflict Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Employment Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Build Identity Conflict Outcome": {
+      "main": [
+        [
+          {
+            "node": "2C - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Employment Engine": {
+      "main": [
+        [
+          {
+            "node": "2C - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Final Conformance Gate": {
+      "main": [
+        [
+          {
+            "node": "2C - Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Branch": {
+      "main": [
+        [
+          {
+            "node": "2C - Continue to 2D Gate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Continue Account-Level",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Pack Terminal Persist",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Pack Terminal Persist",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Pack Terminal Persist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Pack Terminal Persist": {
+      "main": [
+        [
+          {
+            "node": "2C - Persist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Persist": {
+      "main": [
+        [
+          {
+            "node": "2C - Restore Terminal State",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Terminal Persist Failed (global, no recursive write)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Pre-Call URL Invariant?": {
+      "main": [
+        [
+          {
+            "node": "2C - Exact Profile Provider",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2C - Build Pre-Call Contract Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Build Pre-Call Contract Error": {
+      "main": [
+        [
+          {
+            "node": "2C - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2C - Restore Terminal State": {
+      "main": [
+        [
+          {
+            "node": "2C - Terminal Stop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "6dbcb7be-1d5c-4aa3-93de-28d22b80ea48",
+  "meta": {
+    "instanceId": "103be981e8db8e32f88742df1e25a9d1be5dab7bb54ee11dc0f02d3c1876b528"
+  },
+  "nodeGroups": [],
+  "id": "sPMsp4tngX1bpyDR",
+  "tags": []
+}

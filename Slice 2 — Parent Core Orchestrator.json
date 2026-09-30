@@ -1,0 +1,2767 @@
+{
+  "name": "Slice 2 — Parent Core Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "5bf64291-2995-46c1-892d-cbae14ba8a1f",
+      "name": "PARENT - Entry (Execute Workflow Trigger)",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -3296,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nfunction fail(detail) {\n  return [{\n    json: {\n      ...s,\n      _parent_fail: {\n        code: 'INTERNAL_CONTRACT_ERROR',\n        stage: 'PARENT_ENTRY',\n        detail\n      },\n      _parent_route: 'FAILED'\n    }\n  }];\n}\n\nif (!s || typeof s !== 'object' || Array.isArray(s)) {\n  return fail('Parent input must be one canonical object.');\n}\n\nif (!s.airtable_record_id) return fail('Missing airtable_record_id.');\nif (!s.run_id) return fail('Missing run_id.');\nif (!s.email) return fail('Missing canonical email.');\nif (!s.email_domain) return fail('Missing email_domain.');\n\nif (s.enrichment_status !== 'processing') {\n  return fail('Parent entry requires enrichment_status=processing.');\n}\nif (s.result_status !== 'pending') {\n  return fail('Parent entry requires result_status=pending.');\n}\nif (s.manual_review !== false) {\n  return fail('Parent entry requires manual_review=false.');\n}\nif (s.manual_review_reason !== null) {\n  return fail('Parent entry requires manual_review_reason=null.');\n}\nif (s.routing_outcome !== null) {\n  return fail('Parent entry requires routing_outcome=null.');\n}\n\nreturn [{\n  json: {\n    ...s,\n    _parent: {\n      contract_version: 'PARENT_CORE_THROUGH_2E_V1',\n      started_at: new Date().toISOString(),\n      stage: 'READY_FOR_2A'\n    },\n    _parent_route: 'CONTINUE'\n  }\n}];\n"
+      },
+      "id": "68c1da07-11bc-4f26-b7fd-fcf116298cd0",
+      "name": "PARENT - Validate Entry Envelope",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3088,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "CONTINUE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "50236eba-6b4a-4b9d-86d2-abab080b77a7"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "FAILED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "c05cb450-63ea-4e95-a6d1-684e772c0f98"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 2
+        }
+      },
+      "id": "b12229fd-a45f-475b-a21e-8743cbd7dca5",
+      "name": "PARENT - Entry Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -2864,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "Gn8EViVA07xux6gr",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/Gn8EViVA07xux6gr",
+          "cachedResultName": "Layer 2A (Account Resolution)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "f89d7470-2172-4e76-a290-c90822d9f653",
+      "name": "PARENT - Execute Layer 2A",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -2640,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nfunction internal(detail) {\n  return [{\n    json: {\n      ...s,\n      _parent_fail: {\n        code: 'INTERNAL_CONTRACT_ERROR',\n        stage: 'AFTER_2A',\n        detail\n      },\n      _parent_route: 'FAILED'\n    }\n  }];\n}\n\nif (s.routing_outcome === 'FAILED' || s.enrichment_status === 'failed' || s.result_status === 'failed') {\n  return [{ json: { ...s, _parent_route: 'FAILED' } }];\n}\n\nif (s.manual_review === true || s.routing_outcome === 'MANUAL_REVIEW') {\n  return [{ json: { ...s, _parent_route: 'MANUAL_REVIEW' } }];\n}\n\nconst happy =\n  s.account_resolution_status === 'CONFIRMED' &&\n  s.account_company &&\n  s.manual_review === false &&\n  s.manual_review_reason === null &&\n  s.enrichment_status === 'processing' &&\n  s.result_status === 'pending' &&\n  s.routing_outcome === null;\n\nif (happy) {\n  return [{\n    json: {\n      ...s,\n      _parent: { ...(s._parent || {}), stage: 'READY_FOR_2B' },\n      _parent_route: 'CONTINUE'\n    }\n  }];\n}\n\nreturn internal('Unrecognized Layer 2A output/lifecycle tuple.');\n"
+      },
+      "id": "d6be6bca-2a92-43ba-adb6-04fb583929b1",
+      "name": "PARENT - Gate After 2A",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2416,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "CONTINUE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "9010fc6f-bcdb-4916-aca7-746fe306f72e"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "MANUAL_REVIEW",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "c38b5c19-0843-49c8-b4d5-463a84519729"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "FAILED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "67eb4c50-973b-4b1d-8609-5b915b4bcbd9"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 3
+        }
+      },
+      "id": "6eb7ec91-795d-4e00-a31b-daf365904ab7",
+      "name": "PARENT - Route After 2A",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -2208,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "K4rOSfm9N6jraUyh",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/K4rOSfm9N6jraUyh",
+          "cachedResultName": "Layer 2B (Person Resolution)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "98a36b46-9310-4655-8761-5e2a07977279",
+      "name": "PARENT - Execute Layer 2B",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -1984,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nfunction internal(detail) {\n  return [{\n    json: {\n      ...s,\n      _parent_fail: {\n        code: 'INTERNAL_CONTRACT_ERROR',\n        stage: 'AFTER_2B',\n        detail\n      },\n      _parent_route: 'FAILED'\n    }\n  }];\n}\n\nif (s.routing_outcome === 'FAILED' || s.enrichment_status === 'failed' || s.result_status === 'failed') {\n  return [{ json: { ...s, _parent_route: 'FAILED' } }];\n}\n\nif (s.manual_review === true || s.routing_outcome === 'MANUAL_REVIEW') {\n  return [{ json: { ...s, _parent_route: 'MANUAL_REVIEW' } }];\n}\n\nconst allowed = new Set(['CONFIRMED', 'NOT_FOUND', 'SKIPPED_ROLE_INBOX']);\nif (\n  allowed.has(s.person_resolution_status) &&\n  s.manual_review === false &&\n  s.manual_review_reason === null &&\n  s.enrichment_status === 'processing' &&\n  s.result_status === 'pending' &&\n  s.routing_outcome === null\n) {\n  return [{\n    json: {\n      ...s,\n      _parent: { ...(s._parent || {}), stage: 'READY_FOR_2C' },\n      _parent_route: 'CONTINUE'\n    }\n  }];\n}\n\nreturn internal('Unrecognized Layer 2B output/lifecycle tuple.');\n"
+      },
+      "id": "e7c62555-50f9-446f-a824-40eff3b7ea34",
+      "name": "PARENT - Gate After 2B",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1760,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "CONTINUE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "MANUAL_REVIEW",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "FAILED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 3
+        }
+      },
+      "id": "de09298c-094b-4ad4-8ce5-d9bceff020e6",
+      "name": "PARENT - Route After 2B",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -1536,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "sPMsp4tngX1bpyDR",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/sPMsp4tngX1bpyDR",
+          "cachedResultName": "Layer 2C (Employer Verification)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "fccd3492-c571-4d3c-89dc-56f4e2c19685",
+      "name": "PARENT - Execute Layer 2C",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -1328,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nfunction internal(detail) {\n  return [{\n    json: {\n      ...s,\n      _parent_fail: {\n        code: 'INTERNAL_CONTRACT_ERROR',\n        stage: 'AFTER_2C',\n        detail\n      },\n      _parent_route: 'FAILED'\n    }\n  }];\n}\n\nif (s.routing_outcome === 'FAILED' || s.enrichment_status === 'failed' || s.result_status === 'failed') {\n  return [{ json: { ...s, _parent_route: 'FAILED' } }];\n}\n\nif (s.manual_review === true || s.routing_outcome === 'MANUAL_REVIEW') {\n  return [{ json: { ...s, _parent_route: 'MANUAL_REVIEW' } }];\n}\n\nconst lifecycleOpen =\n  s.manual_review === false &&\n  s.manual_review_reason === null &&\n  s.enrichment_status === 'processing' &&\n  s.result_status === 'pending' &&\n  s.routing_outcome === null;\n\nif (!lifecycleOpen) {\n  return internal('Layer 2C returned a non-terminal state with an invalid lifecycle tuple.');\n}\n\nconst ev = s.inbound_employer_verification || {};\n\nconst accountOnly =\n  (s.person_resolution_status === 'NOT_FOUND' || s.person_resolution_status === 'SKIPPED_ROLE_INBOX') &&\n  s.person === null &&\n  s.matched_employer_candidate === null &&\n  ev.status === 'SKIPPED' &&\n  s.matched_employer === null &&\n  (s.organization_relationship === null || s.organization_relationship === undefined);\n\nif (accountOnly) {\n  return [{\n    json: {\n      ...s,\n      _parent: { ...(s._parent || {}), stage: 'READY_FOR_2E_ACCOUNT_ONLY' },\n      _parent_route: 'ACCOUNT_ONLY_2E'\n    }\n  }];\n}\n\nconst verified =\n  s.person_resolution_status === 'CONFIRMED' &&\n  !!s.person &&\n  ev.status === 'VERIFIED' &&\n  !!s.matched_employer;\n\nif (verified) {\n  return [{\n    json: {\n      ...s,\n      _parent: { ...(s._parent || {}), stage: 'READY_FOR_2D' },\n      _parent_route: 'VERIFIED_TO_2D'\n    }\n  }];\n}\n\nreturn internal('Layer 2C output is neither canonical SKIPPED account-only nor VERIFIED person path.');\n"
+      },
+      "id": "f3ba345b-95d7-4166-ab30-4ea1754fb371",
+      "name": "PARENT - Gate After 2C",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "ACCOUNT_ONLY_2E",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f62dbd75-2a04-4438-b361-723359ea4178"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "VERIFIED_TO_2D",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "b0a57ba3-e3e7-4643-9803-88cb9c6813ec"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "MANUAL_REVIEW",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f7ff16f1-f5e5-4f23-aaf5-d7b81f0ad6a7"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "FAILED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "46b656be-c8e0-4294-b83e-231c16c49f2f"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 4
+        }
+      },
+      "id": "f2f78634-09b8-4c7e-b08d-955929487c00",
+      "name": "PARENT - Route After 2C",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -880,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "9Yi80KUrq78yaFSF",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/9Yi80KUrq78yaFSF",
+          "cachedResultName": "Layer 2D (Organization Relationship)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "eb482255-0d90-4d88-b6ba-30e6a4fb6bd5",
+      "name": "PARENT - Execute Layer 2D",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -464,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nfunction internal(detail) {\n  return [{\n    json: {\n      ...s,\n      _parent_fail: {\n        code: 'INTERNAL_CONTRACT_ERROR',\n        stage: 'AFTER_2D',\n        detail\n      },\n      _parent_route: 'FAILED'\n    }\n  }];\n}\n\nif (s.routing_outcome === 'FAILED' || s.enrichment_status === 'failed' || s.result_status === 'failed') {\n  return [{ json: { ...s, _parent_route: 'FAILED' } }];\n}\n\nif (\n  s.manual_review === true ||\n  s.routing_outcome === 'MANUAL_REVIEW' ||\n  s.organization_relationship === 'UNKNOWN' ||\n  s.organization_relationship === 'UNRELATED'\n) {\n  return [{ json: { ...s, _parent_route: 'MANUAL_REVIEW' } }];\n}\n\nconst positive = new Set([\n  'SAME_ENTITY',\n  'SUBSIDIARY',\n  'PARENT',\n  'BRAND_OR_BUSINESS_UNIT'\n]);\n\nconst happy =\n  positive.has(s.organization_relationship) &&\n  s.manual_review === false &&\n  s.manual_review_reason === null &&\n  s.enrichment_status === 'processing' &&\n  s.result_status === 'pending' &&\n  s.routing_outcome === null;\n\nif (happy) {\n  return [{\n    json: {\n      ...s,\n      _parent: { ...(s._parent || {}), stage: 'READY_FOR_2E_VERIFIED_PERSON' },\n      _parent_route: 'VERIFIED_PERSON_2E'\n    }\n  }];\n}\n\nreturn internal('Unrecognized Layer 2D output/lifecycle tuple.');\n"
+      },
+      "id": "479a52fb-1d73-4c1c-b91f-c0d6a24747e6",
+      "name": "PARENT - Gate After 2D",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "VERIFIED_PERSON_2E",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "MANUAL_REVIEW",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "FAILED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 3
+        }
+      },
+      "id": "054a4b21-2053-4040-afdc-2f9bb4df060b",
+      "name": "PARENT - Route After 2D",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -224,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nconst mode =\n  (s.l2e_config && s.l2e_config.classifier_execution_mode) ||\n  $vars.L2E_CLASSIFIER_EXECUTION_MODE;\n\nconst hydration =\n  (s.l2e_config && s.l2e_config.hydration_endpoint_identity) ||\n  $vars.L2E_HYDRATION_ENDPOINT_IDENTITY;\n\nconst profile =\n  (s.l2e_config && s.l2e_config.profile_endpoint_identity) ||\n  $vars.L2E_PROFILE_ENDPOINT_IDENTITY;\n\nconst title =\n  (s.l2e_config && s.l2e_config.title_endpoint_identity) ||\n  $vars.L2E_TITLE_ENDPOINT_IDENTITY ||\n  null;\n\nif (!mode || !hydration || !profile) {\n  return [{\n    json: {\n      ...s,\n      _parent_fail: {\n        code: 'INTERNAL_CONTRACT_ERROR',\n        stage: 'PREPARE_2E_ACCOUNT_ONLY',\n        detail: 'Missing L2E runtime config variables.'\n      },\n      _parent_route: 'FAILED'\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ...s,\n    _2e_entry_mode: 'ACCOUNT_ONLY',\n    l2e_config: {\n      ...(s.l2e_config || {}),\n      classifier_execution_mode: mode,\n      hydration_endpoint_identity: hydration,\n      profile_endpoint_identity: profile,\n      title_endpoint_identity: title\n    },\n    _parent: { ...(s._parent || {}), stage: 'EXECUTING_2E_ACCOUNT_ONLY' }\n  }\n}];\n"
+      },
+      "id": "b849c6f7-6e66-47bd-a3f9-132e6b1a623e",
+      "name": "PARENT - Prepare 2E ACCOUNT_ONLY",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -384,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nconst mode =\n  (s.l2e_config && s.l2e_config.classifier_execution_mode) ||\n  $vars.L2E_CLASSIFIER_EXECUTION_MODE;\n\nconst hydration =\n  (s.l2e_config && s.l2e_config.hydration_endpoint_identity) ||\n  $vars.L2E_HYDRATION_ENDPOINT_IDENTITY;\n\nconst profile =\n  (s.l2e_config && s.l2e_config.profile_endpoint_identity) ||\n  $vars.L2E_PROFILE_ENDPOINT_IDENTITY;\n\nconst title =\n  (s.l2e_config && s.l2e_config.title_endpoint_identity) ||\n  $vars.L2E_TITLE_ENDPOINT_IDENTITY ||\n  null;\n\nif (!mode || !hydration || !profile) {\n  return [{\n    json: {\n      ...s,\n      _parent_fail: {\n        code: 'INTERNAL_CONTRACT_ERROR',\n        stage: 'PREPARE_2E_VERIFIED_PERSON',\n        detail: 'Missing L2E runtime config variables.'\n      },\n      _parent_route: 'FAILED'\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ...s,\n    _2e_entry_mode: 'VERIFIED_PERSON',\n    l2e_config: {\n      ...(s.l2e_config || {}),\n      classifier_execution_mode: mode,\n      hydration_endpoint_identity: hydration,\n      profile_endpoint_identity: profile,\n      title_endpoint_identity: title\n    },\n    _parent: { ...(s._parent || {}), stage: 'EXECUTING_2E_VERIFIED_PERSON' }\n  }\n}];\n"
+      },
+      "id": "1da57ade-8b6d-45b1-8440-c5951e494bf1",
+      "name": "PARENT - Prepare 2E VERIFIED_PERSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "JhBxT5jEmoLxrji8",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/JhBxT5jEmoLxrji8",
+          "cachedResultName": "Layer 2E — HR Discovery + Candidate Verification"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "6438ea9a-5a1c-4643-9c6d-3fe49bfe1e42",
+      "name": "PARENT - Execute Layer 2E",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nfunction internal(detail) {\n  return [{\n    json: {\n      ...s,\n      _parent_fail: {\n        code: 'INTERNAL_CONTRACT_ERROR',\n        stage: 'AFTER_2E',\n        detail\n      },\n      _parent_route: 'FAILED'\n    }\n  }];\n}\n\nif (s._2e_fail) {\n  return internal(\n    'Layer 2E returned INTERNAL_CONTRACT_ERROR: ' +\n    String(s._2e_fail.detail || s._2e_fail.code || 'unknown')\n  );\n}\n\nif (s.routing_outcome === 'FAILED' || s.enrichment_status === 'failed' || s.result_status === 'failed') {\n  return [{ json: { ...s, _parent_route: 'FAILED' } }];\n}\n\nif (!['success', 'empty', 'failed'].includes(s.hr_discovery_status)) {\n  return internal('Missing or invalid hr_discovery_status.');\n}\n\nif (!Array.isArray(s.hr_contacts)) {\n  return internal('hr_contacts must be an array.');\n}\nif (!Array.isArray(s.flagged_hr_contacts)) {\n  return internal('flagged_hr_contacts must be an array.');\n}\nif (!s.hr_discovery_evidence || typeof s.hr_discovery_evidence !== 'object') {\n  return internal('Missing hr_discovery_evidence.');\n}\n\nif (\n  s.manual_review !== false ||\n  s.manual_review_reason !== null ||\n  s.enrichment_status !== 'processing' ||\n  s.result_status !== 'pending' ||\n  s.routing_outcome !== null\n) {\n  return internal('Layer 2E normal output mutated upstream open lifecycle.');\n}\n\nreturn [{\n  json: {\n    ...s,\n    _parent: {\n      ...(s._parent || {}),\n      stage: 'CORE_THROUGH_2E_COMPLETE',\n      completed_through: '2E'\n    },\n    _parent_route: 'CORE_COMPLETE'\n  }\n}];\n"
+      },
+      "id": "3d70f01e-5cfc-4324-8c84-4addc5b5e6cd",
+      "name": "PARENT - Gate After 2E",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "CORE_COMPLETE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._parent_route }}",
+                    "rightValue": "FAILED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 2
+        }
+      },
+      "id": "fe532e2c-8b2a-4be1-b991-6072d509e60d",
+      "name": "PARENT - Route After 2E",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        672,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\nreturn [{\n  json: {\n    ...s,\n    _parent_core_result: {\n      status: 'CORE_THROUGH_2E_COMPLETE',\n      next_layer: 'NOT_IMPLEMENTED_YET',\n      note: 'Account Fit / Persona Fit / Data Confidence / Sales Brief / Final Routing are intentionally not part of this parent version.'\n    }\n  }\n}];\n"
+      },
+      "id": "e4887475-d314-4e0f-b8e8-08ba63fec898",
+      "name": "PARENT - Core Through 2E Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\nreturn [{\n  json: {\n    ...s,\n    _parent_terminal: {\n      type: 'MANUAL_REVIEW',\n      persistence_wired: false,\n      note: 'TEST/ASSEMBLY parent: terminal Airtable persistence is not wired yet.'\n    }\n  }\n}];\n"
+      },
+      "id": "e9458a4d-8764-4ad6-a05a-7b147bbaf271",
+      "name": "PARENT - STOP Manual Review (Persistence TODO)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\nreturn [{\n  json: {\n    ...s,\n    _parent_terminal: {\n      type: 'FAILED',\n      persistence_wired: false,\n      note: 'TEST/ASSEMBLY parent: terminal Airtable persistence is not wired yet.'\n    }\n  }\n}];\n"
+      },
+      "id": "a1e27dac-028d-4a53-9e87-78357c34bfe4",
+      "name": "PARENT - STOP Failed (Persistence TODO)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\nconst company = s.account_company || {};\n\nconst rawCountry = company.country == null\n  ? null\n  : String(company.country).trim();\n\nconst employeeCount =\n  Number.isFinite(Number(company.employee_count))\n    ? Number(company.employee_count)\n    : null;\n\nconst TARGET_COUNTRIES = new Set([\n  // US\n  'united states', 'united states of america', 'usa', 'us',\n\n  // Israel\n  'israel', 'il',\n\n  // UK\n  'united kingdom', 'uk', 'great britain', 'gb',\n\n  // Switzerland / Norway\n  'switzerland', 'ch',\n  'norway', 'no',\n\n  // EU\n  'austria', 'at',\n  'belgium', 'be',\n  'bulgaria', 'bg',\n  'croatia', 'hr',\n  'cyprus', 'cy',\n  'czech republic', 'czechia', 'cz',\n  'denmark', 'dk',\n  'estonia', 'ee',\n  'finland', 'fi',\n  'france', 'fr',\n  'germany', 'de',\n  'greece', 'gr',\n  'hungary', 'hu',\n  'ireland', 'ie',\n  'italy', 'it',\n  'latvia', 'lv',\n  'lithuania', 'lt',\n  'luxembourg', 'lu',\n  'malta', 'mt',\n  'netherlands', 'nl',\n  'poland', 'pl',\n  'portugal', 'pt',\n  'romania', 'ro',\n  'slovakia', 'sk',\n  'slovenia', 'si',\n  'spain', 'es',\n  'sweden', 'se'\n]);\n\nconst country =\n  rawCountry === null || rawCountry === ''\n    ? null\n    : rawCountry.toLowerCase();\n\nconst countryKnown = country !== null;\nconst employeeCountKnown =\n  employeeCount !== null &&\n  Number.isFinite(employeeCount) &&\n  employeeCount >= 0;\n\nconst isTargetMarket =\n  countryKnown ? TARGET_COUNTRIES.has(country) : null;\n\nconst reasons = [];\n\nif (countryKnown) {\n  reasons.push(\n    isTargetMarket ? 'TARGET_MARKET' : 'NON_TARGET_MARKET'\n  );\n} else {\n  reasons.push('COUNTRY_UNKNOWN');\n}\n\nif (!employeeCountKnown) {\n  reasons.push('EMPLOYEE_COUNT_UNKNOWN');\n} else if (employeeCount < 100) {\n  reasons.push('EMPLOYEE_COUNT_BELOW_100');\n} else if (employeeCount < 500) {\n  reasons.push('EMPLOYEE_COUNT_100_499');\n} else {\n  reasons.push('EMPLOYEE_COUNT_500_PLUS');\n}\n\n\n// Exact precedence — first matching rule wins.\n\nlet accountFit;\n\nif (countryKnown && !isTargetMarket) {\n  accountFit = 'LOW';\n}\nelse if (employeeCountKnown && employeeCount < 100) {\n  accountFit = 'LOW';\n}\nelse if (!countryKnown || !employeeCountKnown) {\n  accountFit = 'UNKNOWN';\n}\nelse if (isTargetMarket && employeeCount < 500) {\n  accountFit = 'MEDIUM';\n}\nelse if (isTargetMarket && employeeCount >= 500) {\n  accountFit = 'HIGH';\n}\nelse {\n  accountFit = 'UNKNOWN';\n}\n\nreturn [{\n  json: {\n    ...s,\n\n    account_fit: accountFit,\n    account_fit_reasons: reasons,\n\n    account_fit_evidence: {\n      country: rawCountry,\n      employee_count: employeeCountKnown\n        ? employeeCount\n        : null,\n      target_market: isTargetMarket\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        -368
+      ],
+      "id": "7432b98a-9cfc-48e0-9414-f22aae334146",
+      "name": "Account Fit"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = { ...($input.first().json || {}) };\n\nconst fieldsToDelete = [\n  // Parent transient routing\n  '_parent_route',\n  '_parent_core_result',\n\n  // 2A transient / provider scratch\n  'account_lookup_request',\n  'lookup_domain',\n  'provider_result',\n  'outcome',\n  'reason_code',\n  'resolved_domain',\n  'evidence',\n  'account_candidates',\n  'dispatch',\n\n  // 2B transient scratch\n  'person_lookup_request',\n  'hydration_needed',\n  'provider_identity_consistency',\n  'profile_reference_consistency',\n  'employer_candidate_consistency',\n  'employer_candidate_field_conflicts',\n  'resolved_name',\n  'person_linkedin_url',\n  'provider_reported_title',\n  'stable_person_id',\n  'name_corroboration',\n  'person_decision',\n  'person_decision_reason',\n  'gate_ok',\n\n  // 2C transient scratch\n  '_2c_problems',\n  '_2c_branch',\n  '_2c_anchor_status',\n  'requested_profile_url',\n  'attempt',\n  '_2c_precall_ok',\n  '_2c_precall_reason',\n  'profile_result',\n  '_2c_url_invariant',\n  '_2c_name_corroboration',\n  '_2c_decision',\n\n  // 2D transient scratch\n  '_2d_problems',\n  '_2d_gate',\n  '_2d_id_conflict',\n  '_2d_id_gate',\n  'relationship_evidence_result',\n  'relationship_verifier_result',\n  '_2d_decision',\n  '_2d_gate_invariants'\n];\n\nfor (const field of fieldsToDelete) {\n  delete s[field];\n}\n\nreturn [{\n  json: s\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        80
+      ],
+      "id": "fd84788e-4205-4e5b-8a2e-1f9776917776",
+      "name": "Cleanup Metadata"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nconst person = s.person || null;\n\nconst canonicalTitle =\n  person &&\n  typeof person.current_title === 'string' &&\n  person.current_title.trim()\n    ? person.current_title.trim()\n    : null;\n\n// ---------- Title normalization ----------\n\nfunction normalizeTitle(value) {\n  if (!value) return null;\n\n  let x = String(value)\n    .normalize('NFKC')\n    .toLowerCase();\n\n  x = x.replace(/\\p{P}/gu, ' ');\n  x = x.replace(/\\s+/g, ' ').trim();\n\n  return x || null;\n}\n\nfunction tokens(value) {\n  return value ? value.split(' ') : [];\n}\n\nfunction containsPhrase(tokenList, phrase) {\n  const p = phrase.split(' ');\n\n  for (let i = 0; i <= tokenList.length - p.length; i++) {\n    let match = true;\n\n    for (let j = 0; j < p.length; j++) {\n      if (tokenList[i + j] !== p[j]) {\n        match = false;\n        break;\n      }\n    }\n\n    if (match) return true;\n  }\n\n  return false;\n}\n\n\n// ---------- Function classification ----------\n\nconst FUNCTION_PRECEDENCE = [\n  'RECRUITING_OPERATIONS',\n  'TALENT_ACQUISITION',\n  'RECRUITING',\n  'PEOPLE',\n  'HR',\n  'GENERAL_MANAGEMENT',\n  'OTHER'\n];\n\nconst FUNCTION_PHRASES = {\n  RECRUITING_OPERATIONS: [\n    'recruiting operations',\n    'recruitment operations',\n    'talent acquisition operations',\n    'ta operations',\n    'recruiting program',\n    'recruiting programs',\n    'recruitment program',\n    'recruitment programs'\n  ],\n\n  TALENT_ACQUISITION: [\n    'talent acquisition',\n    'talent sourcing',\n    'talent partner',\n    'talent recruiter',\n    'talent recruiting'\n  ],\n\n  PEOPLE: [\n    'people operations',\n    'people ops',\n    'people partner',\n    'people and culture',\n    'people culture',\n    'employee experience',\n    'talent management',\n    'talent development',\n    'people analytics',\n    'chief people officer',\n    'chief talent officer'\n  ],\n\n  HR: [\n    'human resources',\n    'human resource',\n    'human resources business partner',\n    'hr business partner',\n    'employee relations'\n  ],\n\n  GENERAL_MANAGEMENT: [\n    'chief executive officer',\n    'chief operating officer',\n    'managing director',\n    'general manager',\n    'co founder'\n  ]\n};\n\nconst FUNCTION_TOKENS = {\n  TALENT_ACQUISITION: [\n    'sourcer'\n  ],\n\n  RECRUITING: [\n    'recruiter',\n    'recruiting',\n    'recruitment',\n    'staffing',\n    'headhunter',\n    'headhunting'\n  ],\n\n  PEOPLE: [\n    'people'\n  ],\n\n  HR: [\n    'hr',\n    'hrbp',\n    'hris'\n  ],\n\n  GENERAL_MANAGEMENT: [\n    'founder',\n    'cofounder',\n    'ceo',\n    'coo',\n    'president'\n  ],\n\n  OTHER: [\n    'sales',\n    'marketing',\n    'finance',\n    'financial',\n    'accounting',\n    'engineering',\n    'engineer',\n    'software',\n    'product',\n    'legal',\n    'counsel',\n    'design',\n    'data',\n    'security',\n    'customer',\n    'support',\n    'service',\n    'medical',\n    'clinical',\n    'procurement',\n    'logistics',\n    'supply',\n    'research',\n    'operations'\n  ]\n};\n\n\n// ---------- Seniority classification ----------\n\nconst SENIORITY_PRECEDENCE = [\n  'EXECUTIVE',\n  'HEAD_DIRECTOR',\n  'MANAGER_LEAD',\n  'SENIOR',\n  'JUNIOR'\n];\n\nconst SENIORITY_PHRASES = {\n  EXECUTIVE: [\n    'chief executive officer',\n    'chief operating officer',\n    'chief people officer',\n    'chief talent officer',\n    'chief human resources officer',\n    'vice president',\n    'managing director',\n    'co founder'\n  ],\n\n  MANAGER_LEAD: [\n    'team lead'\n  ]\n};\n\nconst SENIORITY_TOKENS = {\n  EXECUTIVE: [\n    'chief',\n    'vp',\n    'svp',\n    'evp',\n    'ceo',\n    'coo',\n    'cpo',\n    'chro',\n    'president',\n    'founder',\n    'cofounder'\n  ],\n\n  HEAD_DIRECTOR: [\n    'head',\n    'director'\n  ],\n\n  MANAGER_LEAD: [\n    'manager',\n    'lead'\n  ],\n\n  SENIOR: [\n    'senior',\n    'principal',\n    'staff'\n  ],\n\n  JUNIOR: [\n    'junior',\n    'assistant',\n    'intern',\n    'trainee',\n    'coordinator',\n    'associate'\n  ]\n};\n\n\n// ---------- Semantic classifier ----------\n\nfunction classifyTitle(rawTitle) {\n  const normalized = normalizeTitle(rawTitle);\n  if (!normalized) {\n    return {\n      function: 'UNKNOWN',\n      seniority: 'UNKNOWN',\n      normalized_title: null,\n      reason: 'EMPTY_TITLE'\n    };\n  }\n\n  const tk = tokens(normalized);\n\n  const functionMatches = new Set();\n\n  for (const fn of FUNCTION_PRECEDENCE) {\n    for (const phrase of FUNCTION_PHRASES[fn] || []) {\n      if (containsPhrase(tk, phrase)) {\n        functionMatches.add(fn);\n      }\n    }\n\n    for (const token of FUNCTION_TOKENS[fn] || []) {\n      if (tk.includes(token)) {\n        functionMatches.add(fn);\n      }\n    }\n  }\n\n  const personaFunction =\n    FUNCTION_PRECEDENCE.find(fn => functionMatches.has(fn))\n    || 'UNKNOWN';\n\n\n  const seniorityMatches = new Set();\n\n  for (const level of SENIORITY_PRECEDENCE) {\n    for (const phrase of SENIORITY_PHRASES[level] || []) {\n      if (containsPhrase(tk, phrase)) {\n        seniorityMatches.add(level);\n      }\n    }\n\n    for (const token of SENIORITY_TOKENS[level] || []) {\n      if (tk.includes(token)) {\n        seniorityMatches.add(level);\n      }\n    }\n  }\n\n  let personaSeniority =\n    SENIORITY_PRECEDENCE.find(level => seniorityMatches.has(level))\n    || null;\n\n  if (!personaSeniority) {\n    personaSeniority =\n      personaFunction === 'UNKNOWN'\n        ? 'UNKNOWN'\n        : 'INDIVIDUAL_CONTRIBUTOR';\n  }\n\n  return {\n    function: personaFunction,\n    seniority: personaSeniority,\n    normalized_title: normalized,\n    reason:\n      personaFunction === 'UNKNOWN'\n        ? 'NO_SUPPORTED_FUNCTION_CUE'\n        : 'FUNCTION_CLASSIFIED'\n  };\n}\n\n\n// ---------- Persona Fit ----------\n\n// ---------- Persona Fit ----------\n\nconst HR_FAMILY = new Set([\n  'RECRUITING_OPERATIONS',\n  'TALENT_ACQUISITION',\n  'RECRUITING',\n  'PEOPLE',\n  'HR'\n]);\n\nconst VERIFIED_RELATIONSHIPS = new Set([\n  'SAME_ENTITY',\n  'SUBSIDIARY',\n  'PARENT',\n  'BRAND_OR_BUSINESS_UNIT'\n]);\n\nfunction cleanTitle(value) {\n  if (typeof value !== 'string') return null;\n\n  const v = value.trim();\n  return v || null;\n}\n\nlet title = canonicalTitle;\n\nlet titleSource =\n  title\n    ? 'CANONICAL_CURRENT_TITLE'\n    : null;\n\nlet titlesConsidered =\n  title\n    ? [title]\n    : [];\n\nconst canUseClassificationFallback =\n  person != null &&\n  s.person_resolution_status === 'CONFIRMED' &&\n  s.inbound_employer_verification?.status === 'VERIFIED' &&\n  VERIFIED_RELATIONSHIPS.has(s.organization_relationship);\n\n\n// --------------------------------------------------\n// A. Verified current target-account roles\n// --------------------------------------------------\n\nlet verifiedTargetTitlesFound = false;\n\nif (!title && canUseClassificationFallback) {\n\n  const roles =\n    Array.isArray(\n      s.inbound_employer_verification?.current_roles_considered\n    )\n      ? s.inbound_employer_verification.current_roles_considered\n      : [];\n\n  const verifiedCurrentTitles = [\n    ...new Set(\n      roles\n        .filter(role =>\n          role?.role_observation?.currentness === 'CURRENT' &&\n          role?.account_comparison?.result === 'IDENTITY_MATCH' &&\n          role?.selection_eligibility === 'ELIGIBLE_CURRENT'\n        )\n        .map(role =>\n          cleanTitle(role?.role_observation?.title)\n        )\n        .filter(Boolean)\n    )\n  ];\n\n  if (verifiedCurrentTitles.length > 0) {\n\n    verifiedTargetTitlesFound = true;\n    titlesConsidered = verifiedCurrentTitles;\n\n    const classifiedRoles =\n      verifiedCurrentTitles.map(roleTitle => ({\n        title: roleTitle,\n        classification: classifyTitle(roleTitle)\n      }));\n\n    const hrRoles =\n      classifiedRoles.filter(x =>\n        HR_FAMILY.has(x.classification.function)\n      );\n\n    const explicitNonHrRoles =\n      classifiedRoles.filter(x =>\n        x.classification.function !== 'UNKNOWN' &&\n        !HR_FAMILY.has(x.classification.function)\n      );\n\n    // Safe consensus:\n    // at least one verified HR-family title\n    // and no verified current title explicitly contradicts it.\n    if (\n      hrRoles.length > 0 &&\n      explicitNonHrRoles.length === 0\n    ) {\n\n      const functionRank =\n        new Map(\n          FUNCTION_PRECEDENCE.map(\n            (value, index) => [value, index]\n          )\n        );\n\n      const seniorityRank =\n        new Map(\n          [\n            ...SENIORITY_PRECEDENCE,\n            'INDIVIDUAL_CONTRIBUTOR',\n            'UNKNOWN'\n          ].map(\n            (value, index) => [value, index]\n          )\n        );\n\n      hrRoles.sort((a, b) => {\n        const functionDiff =\n          (functionRank.get(a.classification.function) ?? 999) -\n          (functionRank.get(b.classification.function) ?? 999);\n\n        if (functionDiff !== 0) {\n          return functionDiff;\n        }\n\n        return (\n          (seniorityRank.get(a.classification.seniority) ?? 999) -\n          (seniorityRank.get(b.classification.seniority) ?? 999)\n        );\n      });\n\n      title = hrRoles[0].title;\n\n      titleSource =\n        verifiedCurrentTitles.length > 1\n          ? 'VERIFIED_CURRENT_ROLE_CONSENSUS'\n          : 'VERIFIED_CURRENT_ROLE';\n    }\n  }\n}\n\n\n// --------------------------------------------------\n// B. Provider title fallback\n//\n// Only when:\n// - person is confirmed\n// - employer is verified\n// - org relationship is verified\n// - there was NO usable verified current account title\n//\n// This prevents a stale provider title from overriding\n// contradictory verified employment evidence.\n// --------------------------------------------------\n\nif (\n  !title &&\n  canUseClassificationFallback &&\n  !verifiedTargetTitlesFound\n) {\n\n  const providerTitle =\n    cleanTitle(person?.provider_reported_title);\n  if (providerTitle) {\n    title = providerTitle;\n    titleSource =\n      'PROVIDER_REPORTED_TITLE_VERIFIED_EMPLOYER';\n\n    titlesConsidered = [providerTitle];\n  }\n}\n\n\nconst classification = classifyTitle(title);\n\nconst personaFunction = classification.function;\nconst personaSeniority = classification.seniority;\n\nlet personaFit;\nlet personaFitReason;\n\n\n\n// No resolved/verified current person title\nif (!person || !title) {\n  personaFit = 'UNKNOWN';\n  personaFitReason = 'PERSONA_TITLE_UNKNOWN';\n}\n\nelse if (HR_FAMILY.has(personaFunction)) {\n\n  if (\n    personaSeniority === 'EXECUTIVE' ||\n    personaSeniority === 'HEAD_DIRECTOR' ||\n    personaSeniority === 'MANAGER_LEAD' ||\n    personaSeniority === 'SENIOR'\n  ) {\n    personaFit = 'HIGH';\n    personaFitReason = 'HR_FAMILY_SENIOR_OR_MANAGER';\n  }\n\n  else if (\n    personaSeniority === 'INDIVIDUAL_CONTRIBUTOR' ||\n    personaSeniority === 'JUNIOR'\n  ) {\n    personaFit = 'MEDIUM';\n    personaFitReason = 'HR_FAMILY_IC_OR_JUNIOR';\n  }\n\n  else {\n    personaFit = 'UNKNOWN';\n    personaFitReason = 'HR_FAMILY_SENIORITY_UNKNOWN';\n  }\n}\n\nelse if (\n  personaFunction === 'GENERAL_MANAGEMENT' &&\n  personaSeniority === 'EXECUTIVE'\n) {\n  personaFit = 'MEDIUM';\n  personaFitReason = 'GENERAL_MANAGEMENT_EXECUTIVE';\n}\n\nelse if (personaFunction === 'GENERAL_MANAGEMENT') {\n  personaFit = 'UNKNOWN';\n  personaFitReason = 'GENERAL_MANAGEMENT_NON_EXECUTIVE';\n}\n\nelse if (personaFunction === 'OTHER') {\n  personaFit = 'LOW';\n  personaFitReason = 'NON_TARGET_FUNCTION';\n}\n\nelse {\n  personaFit = 'UNKNOWN';\n  personaFitReason = 'FUNCTION_UNKNOWN';\n}\n\n\nreturn [{\n  json: {\n    ...s,\n\n    persona_function: personaFunction,\n    persona_seniority: personaSeniority,\n\n    persona_fit: personaFit,\n    persona_fit_reason: personaFitReason,\n\n  persona_fit_evidence: {\n  title,\n  title_source: titleSource,\n  titles_considered: titlesConsidered,\n  normalized_title: classification.normalized_title,\n  classification_reason: classification.reason\n}\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        -352
+      ],
+      "id": "186c4590-3ccf-4bbc-8903-c567dd87215a",
+      "name": "Person Fit"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nconst reasons = [];\nconst limitations = [];\n\n\n// --------------------------------------------------\n// 0. This node is happy-path only.\n// manual_review / FAILED should already have exited.\n// --------------------------------------------------\n\nif (s.manual_review === true) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: Data Confidence reached with manual_review=true'\n  );\n}\n\nif (s.enrichment_status === 'failed' || s.result_status === 'failed') {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: Data Confidence reached after FAILED state'\n  );\n}\n\n\n// --------------------------------------------------\n// 1. Critical confirmations\n// --------------------------------------------------\n\nconst accountConfirmed =\n  s.account_resolution_status === 'CONFIRMED' &&\n  s.account_company != null;\n\nif (accountConfirmed) {\n  reasons.push('ACCOUNT_CONFIRMED');\n}\n\n\nconst personConfirmed =\n  s.person_resolution_status === 'CONFIRMED' &&\n  s.person != null;\n\nconst personNotResolved =\n  s.person_resolution_status === 'NOT_FOUND' ||\n  s.person_resolution_status === 'SKIPPED_ROLE_INBOX' ||\n  s.person_resolution_status === 'SKIPPED_INVALID_NAME';\n\nif (personConfirmed) {\n  reasons.push('PERSON_CONFIRMED');\n}\n\nif (personNotResolved) {\n  reasons.push('PERSON_NOT_RESOLVED');\n}\n\n\nconst employerVerified =\n  personConfirmed &&\n  s.inbound_employer_verification?.status === 'VERIFIED' &&\n  s.matched_employer != null;\n\nif (employerVerified) {\n  reasons.push('EMPLOYER_VERIFIED');\n}\n\n\nconst VERIFIED_RELATIONSHIPS = new Set([\n  'SAME_ENTITY',\n  'SUBSIDIARY',\n  'PARENT',\n  'BRAND_OR_BUSINESS_UNIT'\n]);\n\nconst relationshipVerified =\n  employerVerified &&\n  VERIFIED_RELATIONSHIPS.has(s.organization_relationship);\n\nif (relationshipVerified) {\n  reasons.push('ORGANIZATION_RELATIONSHIP_VERIFIED');\n}\n\n\n// --------------------------------------------------\n// 2. Material conflicts\n// --------------------------------------------------\n\nconst employerFieldConflicts =\n  Array.isArray(\n    s.inbound_employer_verification?.matched_employer_field_conflicts\n  )\n    ? s.inbound_employer_verification.matched_employer_field_conflicts\n    : [];\n\nconst relationshipConflicts =\n  Array.isArray(\n    s.organization_relationship_evidence?.conflicts\n  )\n    ? s.organization_relationship_evidence.conflicts\n    : [];\n\nconst hasMinorSourceInconsistency =\n  employerFieldConflicts.length > 0;\n\nconst hasMaterialConflict =\n  relationshipConflicts.length > 0;\n\nif (hasMaterialConflict) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: material relationship conflict reached Data Confidence'\n  );\n}\n\nif (hasMinorSourceInconsistency) {\n  reasons.push('MINOR_SOURCE_INCONSISTENCY');\n\n  limitations.push({\n    type: 'MINOR_SOURCE_INCONSISTENCY',\n    field: 'matched_employer_field_conflicts'\n  });\n} else {\n  reasons.push('NO_MATERIAL_CONFLICTS');\n}\n\n\n// --------------------------------------------------\n// 3. Critical-data freshness\n//\n// Current parent architecture carries canonical state\n// in-memory through the same execution.\n// If we reached here through the normal parent path,\n// 2A–2D were evaluated in this run.\n// --------------------------------------------------\n\nconst criticalPathComplete =\n  accountConfirmed &&\n  (\n    personNotResolved ||\n    (\n      personConfirmed &&\n      employerVerified &&\n      relationshipVerified\n    )\n  );\n\nif (criticalPathComplete) {\n  reasons.push('CRITICAL_DATA_FRESH');\n}\n\n\n// --------------------------------------------------\n// 4. Noncritical missing data\n// --------------------------------------------------\n\n// Account-Fit-critical firmographics.\n// These have their own LOW precedence rule.\n\nconst countryMissing =\n  !s.account_company?.country;\n\nconst employeeCountMissing =\n  s.account_company?.employee_count == null ||\n  !Number.isFinite(Number(s.account_company.employee_count));\n\nconst accountFitFirmographicGap =\n  s.account_fit === 'UNKNOWN' &&\n  (countryMissing || employeeCountMissing);\n\nif (accountFitFirmographicGap) {\n  reasons.push('NONCRITICAL_DATA_MISSING');\n  if (countryMissing) {\n    limitations.push({\n      type: 'NONCRITICAL_DATA_MISSING',\n      field: 'account_company.country'\n    });\n  }\n\n  if (employeeCountMissing) {\n    limitations.push({\n      type: 'NONCRITICAL_DATA_MISSING',\n      field: 'account_company.employee_count'\n    });\n  }\n}\n\n\n// --------------------------------------------------\n// 5. Data Confidence decision\n// --------------------------------------------------\n\nlet dataConfidence;\nlet decisionBasis;\n\n\n// Critical contract sanity first.\n\nif (!accountConfirmed) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: account is not CONFIRMED on Data Confidence path'\n  );\n}\n\n\n// Step 4A — Account Fit firmographic uncertainty\nif (accountFitFirmographicGap) {\n  dataConfidence = 'LOW';\n  decisionBasis = 'ACCOUNT_FIT_REQUIRED_FIRMOGRAPHICS_MISSING';\n}\n\n\n// Step 3A / 4C — unresolved person\nelse if (personNotResolved) {\n\n  const additionalLimitations =\n    limitations.length;\n\n  if (additionalLimitations === 0) {\n    dataConfidence = 'MEDIUM';\n    decisionBasis = 'PERSON_NOT_RESOLVED_ONLY';\n  } else {\n    dataConfidence = 'LOW';\n    decisionBasis =\n      'PERSON_NOT_RESOLVED_PLUS_NONCRITICAL_LIMITATION';\n  }\n}\n\n\n// Resolved-person path\nelse {\n\n  if (!personConfirmed  || !employerVerified  || !relationshipVerified) {\n    throw new Error(\n      'INTERNAL_CONTRACT_ERROR: incomplete critical resolved-person path'\n    );\n  }\n\n  if (limitations.length === 0) {\n    dataConfidence = 'HIGH';\n    decisionBasis = 'ALL_CRITICAL_EVIDENCE_CONFIRMED';\n  }\n\n  else if (limitations.length === 1) {\n    dataConfidence = 'MEDIUM';\n    decisionBasis = 'ONE_NONCRITICAL_LIMITATION';\n  }\n\n  else {\n    dataConfidence = 'LOW';\n    decisionBasis = 'MULTIPLE_NONCRITICAL_LIMITATIONS';\n  }\n}\n\n\n// Deduplicate reason codes while keeping order.\nconst uniqueReasons = [...new Set(reasons)];\n\n\nreturn [{\n  json: {\n    ...s,\n\n    data_confidence: dataConfidence,\n    data_confidence_reasons: uniqueReasons,\n\n    data_confidence_evidence: {\n      account_confirmed: accountConfirmed,\n      person_confirmed: personConfirmed,\n      person_not_resolved: personNotResolved,\n      employer_verified: employerVerified,\n      organization_relationship_verified: relationshipVerified,\n      critical_data_fresh: criticalPathComplete,\n\n      material_conflict: hasMaterialConflict,\n      minor_source_inconsistency: hasMinorSourceInconsistency,\n\n      account_fit_firmographic_gap: accountFitFirmographicGap,\n\n      limitation_count: limitations.length,\n      limitations,\n\n      decision_basis: decisionBasis\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        64
+      ],
+      "id": "043e2250-f786-4565-8923-05167c7cbac8",
+      "name": "Data Confidence"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\n\n// --------------------------------------------------\n// 0. Final Routing must receive only normal core path\n// --------------------------------------------------\n\nif (s.manual_review === true) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: manual-review lead reached Final Routing'\n  );\n}\n\nif (\n  s.enrichment_status === 'failed' ||\n  s.result_status === 'failed'\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: failed lead reached Final Routing'\n  );\n}\n\nif (\n  s.result_status === 'invalid' ||\n  s.result_status === 'manual'\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: terminal lead reached Final Routing'\n  );\n}\n\n\n// --------------------------------------------------\n// 1. Validate required scoring outputs\n// --------------------------------------------------\n\nconst validAccountFits = new Set([\n  'HIGH',\n  'MEDIUM',\n  'LOW',\n  'UNKNOWN'\n]);\n\nconst validPersonaFits = new Set([\n  'HIGH',\n  'MEDIUM',\n  'LOW',\n  'UNKNOWN'\n]);\n\nconst validDataConfidence = new Set([\n  'HIGH',\n  'MEDIUM',\n  'LOW'\n]);\n\n\nif (validAccountFits.has(s.account_fit) === false) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: invalid or missing account_fit'\n  );\n}\n\nif (validPersonaFits.has(s.persona_fit) === false) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: invalid or missing persona_fit'\n  );\n}\n\nif (validDataConfidence.has(s.data_confidence) === false) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: invalid or missing data_confidence'\n  );\n}\n\n\n// --------------------------------------------------\n// 2. Frozen routing matrix\n// --------------------------------------------------\n\nlet routingOutcome = null;\nlet routingReason = null;\n\n\n// LOW account always loses,\n// regardless of person.\nif (s.account_fit === 'LOW') {\n\n  routingOutcome = 'DISQUALIFIED_FIT';\n  routingReason = 'ACCOUNT_FIT_LOW';\n}\n\n\n// UNKNOWN account requires account review.\nelse if (s.account_fit === 'UNKNOWN') {\n\n  routingOutcome = 'ACCOUNT_REVIEW';\n  routingReason = 'ACCOUNT_FIT_UNKNOWN';\n}\n\n\n// HIGH account\nelse if (s.account_fit === 'HIGH') {\n\n  if (s.persona_fit === 'HIGH') {\n\n    routingOutcome = 'SALES_HIGH_PRIORITY';\n    routingReason = 'HIGH_ACCOUNT_HIGH_PERSONA';\n\n  } else if (s.persona_fit === 'MEDIUM') {\n\n    routingOutcome = 'SALES_STANDARD';\n    routingReason = 'HIGH_ACCOUNT_MEDIUM_PERSONA';\n\n  } else if (s.persona_fit === 'UNKNOWN') {\n\n    routingOutcome = 'ACCOUNT_OPPORTUNITY';\n    routingReason = 'HIGH_ACCOUNT_PERSONA_UNKNOWN';\n\n  } else if (s.persona_fit === 'LOW') {\n\n    routingOutcome = 'NURTURE';\n    routingReason = 'HIGH_ACCOUNT_LOW_PERSONA';\n  }\n}\n\n\n// MEDIUM account\nelse if (s.account_fit === 'MEDIUM') {\n\n  if (s.persona_fit === 'HIGH') {\n\n    routingOutcome = 'SALES_STANDARD';\n    routingReason = 'MEDIUM_ACCOUNT_HIGH_PERSONA';\n\n  } else if (s.persona_fit === 'MEDIUM') {\n\n    routingOutcome = 'NURTURE';\n    routingReason = 'MEDIUM_ACCOUNT_MEDIUM_PERSONA';\n\n  } else if (s.persona_fit === 'UNKNOWN') {\n\n    routingOutcome = 'ACCOUNT_OPPORTUNITY';\n    routingReason = 'MEDIUM_ACCOUNT_PERSONA_UNKNOWN';\n\n  } else if (s.persona_fit === 'LOW') {\n\n    routingOutcome = 'NURTURE';\n    routingReason = 'MEDIUM_ACCOUNT_LOW_PERSONA';\n  }\n}\n\n\n// --------------------------------------------------\n// 3. Contract completeness\n// --------------------------------------------------\n\nif (routingOutcome == null) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: routing matrix produced no outcome'\n  );\n}\n\n\n// --------------------------------------------------\n// 4. Output\n// --------------------------------------------------\n\nreturn [{\n  json: {\n    ...s,\n\n    routing_outcome: routingOutcome,\n\n    routing_evidence: {\n      account_fit: s.account_fit,\n      persona_fit: s.persona_fit,\n\n      // Observable but NOT used to calculate route.\n      data_confidence: s.data_confidence,\n\n      decision_reason: routingReason,\n      routing_contract_version: 'FINAL_ROUTING_V1'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        -384
+      ],
+      "id": "44a5b950-a2c7-4039-92ad-9d61af886a16",
+      "name": "Final Routing"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nif (!s.airtable_record_id) {\n  throw new Error('INTERNAL_CONTRACT_ERROR: missing airtable_record_id');\n}\n\nif (!s.run_id) {\n  throw new Error('INTERNAL_CONTRACT_ERROR: missing run_id');\n}\n\nif (!s.routing_outcome) {\n  throw new Error('INTERNAL_CONTRACT_ERROR: missing routing_outcome');\n}\n\nconst coreCompletedAt = new Date().toISOString();\n\nconst lifecycle = {\n  manual_review: false,\n  enrichment_status: 'completed',\n  result_status: 'completed',\n  routing_outcome: s.routing_outcome\n};\n\nconst verifiedInboundTitle =\n  s.inbound_employer_verification?.current_title_status === 'VERIFIED'\n    ? (s.inbound_employer_verification.current_title ?? null)\n    : null;\n\nconst matchedEmployerForSI =\n  s.matched_employer\n    ? {\n        ...s.matched_employer,\n        verified_title: verifiedInboundTitle\n      }\n    : null;\nconst canonicalContext = {\n  account_company: s.account_company,\n\n  account_fit: s.account_fit,\n  account_fit_reasons: s.account_fit_reasons || [],\n\n  person: s.person ?? null,\n\n  persona_fit: s.persona_fit,\n  persona_function: s.persona_function ?? null,\n  persona_seniority: s.persona_seniority ?? null,\n\n  inbound_employer_verification:\n    s.inbound_employer_verification || {},\n\n  matched_employer:\n    matchedEmployerForSI,\n\n  organization_relationship:\n    s.organization_relationship ?? null,\n\n  data_confidence:\n    s.data_confidence,\n\n  data_confidence_reasons:\n    s.data_confidence_reasons || [],\n\n  hr_discovery_status:\n    s.hr_discovery_status,\n\n  hr_contacts:\n    Array.isArray(s.hr_contacts)\n      ? s.hr_contacts\n      : [],\n\n  flagged_hr_contacts:\n    Array.isArray(s.flagged_hr_contacts)\n      ? s.flagged_hr_contacts\n      : []\n};\n\nreturn [{\n  json: {\n    ...s,\n\n    core_completed_at: coreCompletedAt,\n\n    routing_contract_version:\n      'FINAL_ROUTING_V1',\n\n    lifecycle,\n\n    canonical_context:\n      canonicalContext,\n\n    sales_intelligence_generation: 1,\n\n    // Пока только provisional identity.\n    // Следующей нодой сделаем deterministic/final identity.\n    sales_intelligence_execution_id:\n      `${s.run_id}:si:1`\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1648,
+        64
+      ],
+      "id": "a8519ad1-d725-45fb-866b-3049c4339d69",
+      "name": "Build SI Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nconst productContext = {\n  product_context_version: 'PRODUCT_CONTEXT_V1',\n  allowed_product_claims: []\n};\n\nconst configArtifacts = {\n  sales_intelligence_contract_version: 'SI_V1_3_15',\n  layer_2a_contract_version: 'LAYER_2A_V1_1',\n  routing_contract_version: 'FINAL_ROUTING_V1',\n  layer_2e_contract_version: 'LAYER_2E_V1_20',\n  sales_brief_context_version: 'SALES_BRIEF_CONTEXT_V1_7',\n\n  research_policy_version: 'RESEARCH_POLICY_V1',\n  product_context_version: 'PRODUCT_CONTEXT_V1',\n  signal_taxonomy_version: 'SI_SIGNAL_TAXONOMY_V1',\n  query_builder_version: 'SI_QUERY_BUILDER_V1',\n  unicode_profile_version: 'SI_UNICODE_PROFILE_V1',\n  canonical_url_version: 'CANONICAL_URL_V1',\n  source_normalizer_version: 'SOURCE_NORMALIZER_V1',\n  signal_target_anchor_version: 'SIGNAL_TARGET_ANCHOR_V1',\n  competing_identity_anchor_version: 'COMPETING_IDENTITY_ANCHOR_V1',\n  date_parser_version: 'SI_DATE_PARSER_V1',\n  extractor_contract_version: 'SI_EXTRACTOR_V1',\n  extractor_prompt_version: 'SI_EXTRACTOR_PROMPT_V1',\n\n  research_policy: {\n    MAX_QUERIES: 4,\n    MAX_RESULTS_PER_QUERY: 5,\n    MAX_SELECTED_SOURCE_EDGES_PER_QUERY: 3,\n    MAX_LOGICAL_FETCH_TARGETS: 8,\n    MAX_CANDIDATE_SIGNALS_PER_SOURCE: 10,\n    MAX_CANONICAL_RESEARCH_SIGNALS: 20,\n    MAX_CURRENT_BRIEF_SIGNALS: 8,\n    MAX_RESEARCH_EVIDENCE_ITEMS: 20,\n    MAX_CLAIMS_PER_SIGNAL: 2,\n    MAX_SOURCE_LINK_OBSERVATIONS: 200,\n    MAX_EVIDENCE_EXCERPT_CODEPOINTS: 1000,\n    MAX_SIGNAL_CONTEXT_CODEPOINTS: 1800,\n\n    MAX_ATTEMPTS_PER_SEARCH_QUERY: 3,\n    MAX_TOTAL_SEARCH_LOGICAL_ATTEMPTS: 12,\n    MAX_TOTAL_SEARCH_NETWORK_REQUESTS: 12,\n    SEARCH_TIMEOUT_MS: 10000,\n\n    MAX_ATTEMPTS_PER_FETCH_TARGET: 3,\n    MAX_TOTAL_FETCH_LOGICAL_ATTEMPTS: 24,\n    MAX_REDIRECTS_PER_FETCH_ATTEMPT: 5,\n    MAX_TOTAL_FETCH_NETWORK_REQUESTS: 144,\n    FETCH_TIMEOUT_MS: 15000,\n\n    MAX_WIRE_RESPONSE_BYTES: 2000000,\n    MAX_DECOMPRESSED_RESPONSE_BYTES: 8000000,\n    MAX_NORMALIZED_TEXT_CODEPOINTS: 100000,\n\n    MAX_EXTRACTOR_ATTEMPTS_PER_SOURCE_SNAPSHOT: 2,\n    MAX_TOTAL_EXTRACTOR_ATTEMPTS: 16,\n\n    freshness_windows: {\n      HIRING_SIGNAL: 180,\n      RECRUITING_EXPANSION: 180,\n      WORKFORCE_REDUCTION: 180,\n      ORGANIZATIONAL_CHANGE: 180,\n      COMPANY_EXPANSION: 365,\n      FUNDING_OR_INVESTMENT: 365,\n      PRODUCT_OR_MARKET_LAUNCH: 365,\n      PARTNERSHIP_OR_ACQUISITION: 365,\n      OTHER_RELEVANT: 180,\n      UNKNOWN: null\n    },\n\n    allowed_media_types: [\n      'text/html',\n      'application/xhtml+xml',\n      'text/plain'\n    ],\n\n    unicode_profile_version: 'SI_UNICODE_PROFILE_V1'\n  },\n\n  product_context: productContext,\n\n  signal_taxonomy: {\n    version: 'SI_SIGNAL_TAXONOMY_V1',\n    signal_types: [\n      'HIRING_SIGNAL',\n      'RECRUITING_EXPANSION',\n      'WORKFORCE_REDUCTION',\n      'ORGANIZATIONAL_CHANGE',\n      'COMPANY_EXPANSION',\n      'FUNDING_OR_INVESTMENT',\n      'PRODUCT_OR_MARKET_LAUNCH',\n      'PARTNERSHIP_OR_ACQUISITION',\n      'OTHER_RELEVANT',\n      'UNKNOWN'\n    ]\n  },\n\n  query_builder: {\n    version: 'SI_QUERY_BUILDER_V1'\n  },\n\n  unicode_profile: {\n    profile_version: 'SI_UNICODE_PROFILE_V1',\n    unicode_version: '15.1.0',\n    idna_processing: 'UTS46_NONTRANSITIONAL'\n  },\n\n  canonical_url: {\n    version: 'CANONICAL_URL_V1'\n  },\n\n  source_normalizer: {\n    version: 'SOURCE_NORMALIZER_V1'\n  },\n\n  signal_target_anchor: {\n    version: 'SIGNAL_TARGET_ANCHOR_V1'\n  },\n\n  competing_identity_anchor: {\n    version: 'COMPETING_IDENTITY_ANCHOR_V1'\n  },\n\n  date_parser: {\n    version: 'SI_DATE_PARSER_V1'\n  },\n\n  extractor_contract: {\n    version: 'SI_EXTRACTOR_V1'\n  },\n\n  extractor_prompt:\n    'SI_EXTRACTOR_PROMPT_V1 test prompt'\n};\n\nreturn [{\n  json: {\n    ...s,\n\n    _si_product_context: productContext,\n\n    _si_organization_ref_namespace_map: {},\n\n    _si_config_artifacts: configArtifacts\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        -384
+      ],
+      "id": "af633d2b-4e0c-4770-8beb-bb7c17128f88",
+      "name": "Attach SI Runtime Artifacts"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\n// ============================================================\n// 1. Minimal contract checks\n// ============================================================\n\nif (!s.airtable_record_id) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: missing airtable_record_id before SI fingerprint'\n  );\n}\n\nif (!s.run_id) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: missing run_id before SI fingerprint'\n  );\n}\n\nif (!s.core_completed_at) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: missing core_completed_at before SI fingerprint'\n  );\n}\n\nif (s.routing_contract_version !== 'FINAL_ROUTING_V1') {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: invalid routing_contract_version before SI fingerprint'\n  );\n}\n\nif (!s.lifecycle || typeof s.lifecycle !== 'object') {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: missing lifecycle before SI fingerprint'\n  );\n}\n\nif (!s.canonical_context || typeof s.canonical_context !== 'object') {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: missing canonical_context before SI fingerprint'\n  );\n}\n\nconst generation = s.sales_intelligence_generation;\n\nif (!Number.isInteger(generation) || generation < 1) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: invalid sales_intelligence_generation'\n  );\n}\n\n\n// ============================================================\n// 2. UTF-8\n// Same implementation profile as frozen SI v4.7\n// ============================================================\n\nfunction utf8Bytes(str) {\n  const out = [];\n\n  for (let i = 0; i < str.length; i++) {\n    const c = str.charCodeAt(i);\n\n    if (c < 0x80) {\n      out.push(c);\n    }\n\n    else if (c < 0x800) {\n      out.push(\n        0xC0 | (c >> 6),\n        0x80 | (c & 63)\n      );\n    }\n\n    else if (\n      c >= 0xD800 &&\n      c <= 0xDBFF &&\n      i + 1 < str.length\n    ) {\n      const c2 = str.charCodeAt(i + 1);\n\n      if (c2 >= 0xDC00 && c2 <= 0xDFFF) {\n        const cp =\n          0x10000 +\n          ((c - 0xD800) << 10) +\n          (c2 - 0xDC00);\n\n        out.push(\n          0xF0 | (cp >> 18),\n          0x80 | ((cp >> 12) & 63),\n          0x80 | ((cp >> 6) & 63),\n          0x80 | (cp & 63)\n        );\n\n        i++;\n      } else {\n        out.push(0xEF, 0xBF, 0xBD);\n      }\n    }\n\n    else if (c >= 0xDC00 && c <= 0xDFFF) {\n      out.push(0xEF, 0xBF, 0xBD);\n    }\n\n    else {\n      out.push(\n        0xE0 | (c >> 12),\n        0x80 | ((c >> 6) & 63),\n        0x80 | (c & 63)\n      );\n    }\n  }\n\n  return out;\n}\n\n\n// ============================================================\n// 3. SHA-256\n// Pure JS — same algorithm as SI v4.7\n// ============================================================\n\nconst K = [\n  0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,\n  0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,\n  0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,\n  0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,\n  0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,\n  0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,\n  0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,\n  0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,\n  0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,\n  0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,\n  0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,\n  0xd192e819,0xd6990624,0xf40e3585,0x106aa070,\n  0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,\n  0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,\n  0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,\n  0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2\n];\n\nfunction sha256Hex(input) {\n\n  const bytes =\n    typeof input === 'string'\n      ? utf8Bytes(input)\n      : input.slice();\n\n  const H = [\n    0x6a09e667,\n    0xbb67ae85,\n    0x3c6ef372,\n    0xa54ff53a,\n    0x510e527f,\n    0x9b05688c,\n    0x1f83d9ab,\n    0x5be0cd19\n  ];\n\n  const bitLength = bytes.length * 8;\n\n  bytes.push(0x80);\n\n  while (bytes.length % 64 !== 56) {\n    bytes.push(0);\n  }\n\n  const hi = Math.floor(bitLength / 4294967296);\n  const lo = bitLength >>> 0;\n\n  bytes.push(\n    (hi >>> 24) & 255,\n    (hi >>> 16) & 255,\n    (hi >>> 8) & 255,\n    hi & 255,\n    (lo >>> 24) & 255,\n    (lo >>> 16) & 255,\n    (lo >>> 8) & 255,\n    lo & 255\n  );\n  const w = new Array(64);\n\n  for (let i = 0; i < bytes.length; i += 64) {\n\n    for (let t = 0; t < 16; t++) {\n      w[t] =\n        (bytes[i + 4 * t] << 24) |\n        (bytes[i + 4 * t + 1] << 16) |\n        (bytes[i + 4 * t + 2] << 8) |\n        bytes[i + 4 * t + 3];\n    }\n\n    for (let t = 16; t < 64; t++) {\n\n      const s0 =\n        ((w[t - 15] >>> 7) | (w[t - 15] << 25)) ^\n        ((w[t - 15] >>> 18) | (w[t - 15] << 14)) ^\n        (w[t - 15] >>> 3);\n\n      const s1 =\n        ((w[t - 2] >>> 17) | (w[t - 2] << 15)) ^\n        ((w[t - 2] >>> 19) | (w[t - 2] << 13)) ^\n        (w[t - 2] >>> 10);\n\n      w[t] =\n        (w[t - 16] + s0 + w[t - 7] + s1) | 0;\n    }\n\n    let [\n      a,b,c,d,e,f,g,h\n    ] = H;\n\n    for (let t = 0; t < 64; t++) {\n\n      const S1 =\n        ((e >>> 6) | (e << 26)) ^\n        ((e >>> 11) | (e << 21)) ^\n        ((e >>> 25) | (e << 7));\n\n      const ch =\n        (e & f) ^\n        ((~e) & g);\n\n      const t1 =\n        (h + S1 + ch + K[t] + w[t]) | 0;\n\n      const S0 =\n        ((a >>> 2) | (a << 30)) ^\n        ((a >>> 13) | (a << 19)) ^\n        ((a >>> 22) | (a << 10));\n\n      const maj =\n        (a & b) ^\n        (a & c) ^\n        (b & c);\n\n      const t2 =\n        (S0 + maj) | 0;\n\n      h = g;\n      g = f;\n      f = e;\n      e = (d + t1) | 0;\n      d = c;\n      c = b;\n      b = a;\n      a = (t1 + t2) | 0;\n    }\n\n    H[0] = (H[0] + a) | 0;\n    H[1] = (H[1] + b) | 0;\n    H[2] = (H[2] + c) | 0;\n    H[3] = (H[3] + d) | 0;\n    H[4] = (H[4] + e) | 0;\n    H[5] = (H[5] + f) | 0;\n    H[6] = (H[6] + g) | 0;\n    H[7] = (H[7] + h) | 0;\n  }\n\n  let hex = '';\n\n  for (let i = 0; i < 8; i++) {\n    const v = H[i] >>> 0;\n\n    hex +=\n      ('00000000' + v.toString(16))\n        .slice(-8);\n  }\n\n  return hex;\n}\n\n\n// ============================================================\n// 4. JCS canonicalization\n// Same closed-JSON implementation used by SI\n// ============================================================\n\nfunction jcs(v) {\n\n  if (v === null) {\n    return 'null';\n  }\n\n  const t = typeof v;\n\n  if (t === 'boolean') {\n    return v ? 'true' : 'false';\n  }\n\n  if (t === 'number') {\n\n    if (!isFinite(v)) {\n      throw new Error('JCS_NON_FINITE_NUMBER');\n    }\n\n    if (\n      Math.floor(v) === v &&\n      Math.abs(v) < 1e21\n    ) {\n      return String(v);\n    }\n\n    return JSON.stringify(v);\n  }\n\n  if (t === 'string') {\n    return JSON.stringify(v);\n  }\n\n  if (Array.isArray(v)) {\n    return (\n      '[' +\n      v.map(jcs).join(',') +\n      ']'\n    );\n  }\n\n  if (t === 'object') {\n\n    const keys =\n      Object.keys(v)\n        .sort((a, b) => {\n\n          const n =\n            Math.min(a.length, b.length);\n\n          for (let i = 0; i < n; i++) {\n\n            const x = a.charCodeAt(i);\n            const y = b.charCodeAt(i);\n\n            if (x !== y) {\n              return x < y ? -1 : 1;\n            }\n          }\n\n          if (a.length === b.length) {\n            return 0;\n          }\n\n          return a.length < b.length\n            ? -1\n            : 1;\n        });\n\n    const parts = [];\n\n    for (const key of keys) {\n\n      if (v[key] === undefined) {\n        continue;\n      }\n\n      parts.push(\n        JSON.stringify(key) +\n        ':' +\n        jcs(v[key])\n      );\n    }\n\n    return (\n      '{' +\n      parts.join(',') +\n      '}'\n    );\n  }\n\n  throw new Error(\n    'JCS_UNSUPPORTED_TYPE:' + t\n  );\n}\n\n\n// ============================================================\n// 5. Canonical SI fingerprint\n// ============================================================\n\nconst fingerprintInput = {\n  lifecycle: s.lifecycle,\n  canonical_context: s.canonical_context,\n  routing_contract_version:\n    'FINAL_ROUTING_V1',\n  core_completed_at:\n    s.core_completed_at\n};\n\nconst inputFingerprint =\n  'sha256:' +\n  sha256Hex(\n    jcs(fingerprintInput)\n  );\n\n\n// ============================================================\n// 6. Stable logical SI execution ID\n//\n// Same core run + same SI generation\n// => same execution ID.\n// Intentional SI rerun => increment generation.\n// ============================================================\nconst executionIdentityHash =\n  sha256Hex(\n    jcs({\n      airtable_record_id:\n        s.airtable_record_id,\n\n      run_id:\n        s.run_id,\n\n      sales_intelligence_generation:\n        generation\n    })\n  );\n\n// Deterministic UUID-shaped identifier.\n// We only need a stable opaque logical execution identity.\nconst h =\n  executionIdentityHash.slice(0, 32).split('');\n\n// custom-version nibble\nh[12] = '8';\n\n// RFC variant bits: 10xx\nh[16] =\n  (\n    (parseInt(h[16], 16) & 0x3) |\n    0x8\n  ).toString(16);\n\nconst executionId =\n  h.slice(0, 8).join('') + '-' +\n  h.slice(8, 12).join('') + '-' +\n  h.slice(12, 16).join('') + '-' +\n  h.slice(16, 20).join('') + '-' +\n  h.slice(20, 32).join('');\n\n\n// ============================================================\n// 7. Output\n// ============================================================\n\nreturn [{\n  json: {\n    ...s,\n\n    input_fingerprint:\n      inputFingerprint,\n\n    // overwrite provisional value from Build SI Input\n    sales_intelligence_execution_id:\n      executionId,\n\n    _parent: {\n      ...(s._parent || {}),\n      stage: 'SI_INPUT_READY'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1904,
+        144
+      ],
+      "id": "db58745a-2939-47cd-b14b-9ee9a4d06d77",
+      "name": "Compute SI Fingerprint"
+    },
+    {
+      "parameters": {
+        "jsCode": "const env = $input.first().json || {};\n\n// Берём исходный parent state непосредственно перед вызовом SI.\n// Execute Sub-workflow возвращает уже SI envelope, поэтому для сравнения\n// нам нужен сохранённый upstream item.\nlet core;\n\ntry {\n  core = $(\"Compute SI Fingerprint\").first().json || {};\n} catch (e) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: cannot resolve parent SI input state'+\n    String(e?.message || e)\n  );\n}\n\n\n// ============================================================\n// 1. Basic envelope shape\n// ============================================================\n\nif (\n  !env ||\n  typeof env !== 'object' ||\n  Array.isArray(env)\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: SI returned non-object envelope'\n  );\n}\n\nconst requiredFields = [\n  'airtable_record_id',\n  'run_id',\n  'sales_intelligence_execution_id',\n  'sales_intelligence_generation',\n  'input_fingerprint',\n  'lifecycle',\n  'execution_status',\n  'promotion_status',\n  'configuration_snapshot',\n  'terminal_result'\n];\n\nfor (const field of requiredFields) {\n  if (!(field in env)) {\n    throw new Error(\n      `INTERNAL_CONTRACT_ERROR: SI envelope missing ${field}`\n    );\n  }\n}\n\n\n// ============================================================\n// 2. Immutable execution identity\n// ============================================================\n\nif (env.airtable_record_id !== core.airtable_record_id) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: SI airtable_record_id mismatch'\n  );\n}\n\nif (env.run_id !== core.run_id) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: SI run_id mismatch'\n  );\n}\n\nif (\n  env.sales_intelligence_execution_id !==\n  core.sales_intelligence_execution_id\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: SI execution ID mismatch'\n  );\n}\n\nif (\n  env.sales_intelligence_generation !==\n  core.sales_intelligence_generation\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: SI generation mismatch'\n  );\n}\n\nif (\n  env.input_fingerprint !==\n  core.input_fingerprint\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: SI input fingerprint mismatch'\n  );\n}\n\n\n// ============================================================\n// 3. Lifecycle invariant\n// Sales Intelligence is not allowed to mutate core lifecycle.\n// ============================================================\n\nif (\n  !env.lifecycle ||\n  typeof env.lifecycle !== 'object' ||\n  Array.isArray(env.lifecycle)\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: SI lifecycle missing or invalid'\n  );\n}\n\nconst lifecycleFields = [\n  'manual_review',\n  'enrichment_status',\n  'result_status',\n  'routing_outcome'\n];\n\nfor (const field of lifecycleFields) {\n\n  const actual =\n    env.lifecycle[field] === undefined\n      ? null\n      : env.lifecycle[field];\n\n  const expected =\n    core.lifecycle?.[field] === undefined\n      ? null\n      : core.lifecycle[field];\n\n  if (actual !== expected) {\n    throw new Error(\n      `INTERNAL_CONTRACT_ERROR: SI lifecycle mismatch at ${field}`\n    );\n  }\n}\n\n\n// ============================================================\n// 4. Canonical execution status\n// ============================================================\n\nconst allowedExecutionStatuses = new Set([\n  'completed',\n  'completed_with_warnings',\n  'failed',\n  'skipped'\n]);\n\nif (!allowedExecutionStatuses.has(env.execution_status)) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: invalid SI execution_status'\n  );\n}\n\n\n// ============================================================\n// 5. Terminal result projection invariant\n// ============================================================\n\nif (\n  !env.terminal_result ||\n  typeof env.terminal_result !== 'object' ||\n  Array.isArray(env.terminal_result)\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: missing SI terminal_result'\n  );\n}\n\nif (\n  env.terminal_result.execution_status !==\n  env.execution_status\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: SI execution-status projection mismatch'\n  );\n}\n// ============================================================\n// 6. Routing ↔ SI outcome consistency\n// ============================================================\n\nconst RUN_OUTCOMES = new Set([\n  'SALES_HIGH_PRIORITY',\n  'SALES_STANDARD',\n  'ACCOUNT_OPPORTUNITY',\n  'NURTURE'\n]);\n\nconst SKIP_OUTCOMES = new Set([\n  'ACCOUNT_REVIEW',\n  'DISQUALIFIED_FIT',\n  'MANUAL_REVIEW',\n  'PRIVACY_STOP',\n  'INVALID_INPUT',\n  'FAILED'\n]);\n\nconst routingOutcome =\n  core.lifecycle?.routing_outcome;\n\nif (\n  !RUN_OUTCOMES.has(routingOutcome) &&\n  !SKIP_OUTCOMES.has(routingOutcome)\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: parent routing outcome is outside SI closed sets'\n  );\n}\n\n\n// SKIP routing must produce canonical SI skip.\nif (SKIP_OUTCOMES.has(routingOutcome)) {\n\n  if (env.execution_status !== 'skipped') {\n    throw new Error(\n      'INTERNAL_CONTRACT_ERROR: SI executed research for routing-policy SKIP'\n    );\n  }\n\n  if (\n    env.terminal_result.sales_intelligence_reason !==\n    'ROUTING_POLICY_SKIP'\n  ) {\n    throw new Error(\n      'INTERNAL_CONTRACT_ERROR: invalid SI skip reason'\n    );\n  }\n\n  if (env.configuration_snapshot !== null) {\n    throw new Error(\n      'INTERNAL_CONTRACT_ERROR: routing-policy SKIP must not have configuration snapshot'\n    );\n  }\n}\n\n\n// RUN routing may complete or fail, but must never be policy-skipped.\nif (RUN_OUTCOMES.has(routingOutcome)) {\n\n  if (env.execution_status === 'skipped') {\n    throw new Error(\n      'INTERNAL_CONTRACT_ERROR: RUN routing unexpectedly produced SI skipped'\n    );\n  }\n\n  // A successfully configured RUN must expose the frozen v4.7 snapshot.\n  if (\n    env.execution_status === 'completed' ||\n    env.execution_status === 'completed_with_warnings'\n  ) {\n\n    if (\n      !env.configuration_snapshot ||\n      typeof env.configuration_snapshot !== 'object'\n    ) {\n      throw new Error(\n        'INTERNAL_CONTRACT_ERROR: successful SI result missing configuration snapshot'\n      );\n    }\n\n    if (\n      env.configuration_snapshot.implementation_contract_version !==\n      'SI_N8N_NATIVE_V4_7'\n    ) {\n      throw new Error(\n        'INTERNAL_CONTRACT_ERROR: unexpected SI implementation version'\n      );\n    }\n\n    if (\n      env.configuration_snapshot.reference_contract_version !==\n      'SI_V1_3_15'\n    ) {\n      throw new Error(\n        'INTERNAL_CONTRACT_ERROR: unexpected SI reference contract version'\n      );\n    }\n  }\n}\n\n\n// ============================================================\n// 7. Brief consistency\n// ============================================================\n\nconst tr = env.terminal_result;\n\nif (\n  !Array.isArray(tr.sales_brief_warnings)\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: SI sales_brief_warnings must be an array'\n  );\n}\n\nif (\n  tr.sales_brief_status === 'skipped' ||\n  tr.sales_brief_status === 'failed'\n) {\n  if (tr.sales_brief !== null) {\n    throw new Error(\n      'INTERNAL_CONTRACT_ERROR: skipped/failed SI brief must be null'\n    );\n  }\n}\n\n\n// ============================================================\n// 8. Recombine parent core + validated SI result\n//\n// This is important: Execute Sub-workflow returned the SI envelope,\n// but Airtable persistence needs BOTH the original core result\n// and the SI result.\n// ============================================================\n\nreturn [{\n  json: {\n    ...core,\n\n    manual_review: env.lifecycle.manual_review,\n    enrichment_status: env.lifecycle.enrichment_status,\n    result_status: env.lifecycle.result_status,\n    routing_outcome: env.lifecycle.routing_outcome,\n\n    sales_intelligence: env,\n\n    sales_intelligence_status:\n      env.execution_status,\n\n    sales_intelligence_reason:\n      env.terminal_result?.sales_intelligence_reason ?? null,\n\n    sales_intelligence_research_status:\n      env.terminal_result?.research_status ?? null,\n\n    sales_intelligence_brief_status:\n      env.terminal_result?.sales_brief_status ?? null,\n\n    sales_intelligence_completed_with_warnings:\n      env.execution_status === 'completed_with_warnings',\n\n    _parent: {\n      ...(core._parent || {}),\n      stage: 'SALES_INTELLIGENCE_COMPLETE'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2352,
+        144
+      ],
+      "id": "7d502b1a-babc-4842-8258-2665ec223136",
+      "name": "Validate SI Envelope"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nconst env = s.sales_intelligence;\nconst tr = env?.terminal_result;\nconst lifecycle = env?.lifecycle || s.lifecycle;\n\n\n// ============================================================\n// 1. Contract checks\n// ============================================================\n\nif (!s.airtable_record_id) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: missing airtable_record_id before persistence'\n  );\n}\n\nif (!s.run_id) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: missing run_id before persistence'\n  );\n}\n\nif (\n  !env ||\n  typeof env !== 'object' ||\n  Array.isArray(env)\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: validated SI envelope missing before persistence'\n  );\n}\n\nif (\n  !tr ||\n  typeof tr !== 'object' ||\n  Array.isArray(tr)\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: SI terminal_result missing before persistence'\n  );\n}\n\nif (\n  !lifecycle ||\n  typeof lifecycle !== 'object'\n) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: final lifecycle missing before persistence'\n  );\n}\n\n\n// ============================================================\n// 2. Final lifecycle must be terminal\n//\n// IMPORTANT:\n// top-level s.enrichment_status / result_status may still contain\n// the old in-memory \"processing\" / \"pending\" values.\n// The validated SI lifecycle is authoritative here.\n// ============================================================\n\nif (lifecycle.enrichment_status !== 'completed') {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: final enrichment_status is not completed'\n  );\n}\n\nif (lifecycle.result_status !== 'completed') {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: final result_status is not completed'\n  );\n}\n\nif (!lifecycle.routing_outcome) {\n  throw new Error(\n    'INTERNAL_CONTRACT_ERROR: final routing_outcome missing'\n  );\n}\n\n\n// ============================================================\n// 3. Safe JSON serializer for Airtable long-text fields\n// ============================================================\n\nfunction jsonText(value) {\n  if (value === undefined || value === null) {\n    return null;\n  }\n\n  return JSON.stringify(value);\n}\n\n\n// ============================================================\n// 4. Canonical Airtable business projection\n//\n// Field names intentionally use Airtable display names.\n// Sales Brief legacy field is NOT touched.\n// ============================================================\n\nconst fields = {\n\n  // ---------- Lifecycle ----------\n\n  'Enrichment Status':\n    lifecycle.enrichment_status,\n\n  'Result Status':\n    lifecycle.result_status,\n\n  'Manual Review Needed':\n    lifecycle.manual_review === true,\n\n  'Manual Review Reason':\n    s.manual_review_reason ?? null,\n\n  'Routing Outcome':\n    lifecycle.routing_outcome,\n\n\n  // ---------- Input / guardrails ----------\n\n  'Input Rejection Reason':\n    s.input_rejection_reason ?? null,\n\n  'Domain Status':\n    s.domain_status ?? null,\n\n  'Is Personal Domain':\n    s.is_personal_domain === true,\n\n  'Is Role Inbox':\n    s.is_role_inbox === true,\n\n  'Name Quality':\n    s.name_quality ?? null,\n\n  'Name Quality Reason':\n    s.name_quality_reason ?? null,\n\n\n  // ---------- Account ----------\n\n  'Account Resolution Status':\n    s.account_resolution_status ?? null,\n\n  'Account Resolution Reason':\n    s.account_resolution_reason ?? null,\n\n  'Account Company':\n    jsonText(s.account_company),\n\n  'Account Fit':\n    s.account_fit ?? null,\n\n  'Account Fit Reasons':\n    jsonText(\n      Array.isArray(s.account_fit_reasons)\n        ? s.account_fit_reasons\n        : []\n    ),\n\n\n  // ---------- Person ----------\n\n  'Person Resolution Status':\n    s.person_resolution_status ?? null,\n\n  'Person Resolution Reason':\n    s.person_resolution_reason ?? null,\n\n  'Person':\n    jsonText(s.person),\n\n  'Matched Employer Candidate':\n    jsonText(s.matched_employer_candidate),\n\n  'Inbound Employer Verification':\n    jsonText(s.inbound_employer_verification),\n\n  'Matched Employer':\n    jsonText(s.matched_employer),\n\n\n  // ---------- Organization relationship ----------\n  'Organization Relationship':\n    s.organization_relationship ?? null,\n\n  'Org Relationship Reason':\n    s.organization_relationship_reason ?? null,\n\n  'Org Relationship Source':\n    s.organization_relationship_source ?? null,\n\n  'Org Relationship Evidence':\n    jsonText(s.organization_relationship_evidence),\n\n\n  // ---------- HR discovery ----------\n\n  'HR Discovery Status':\n    s.hr_discovery_status ?? null,\n\n  'HR Contacts':\n    jsonText(\n      Array.isArray(s.hr_contacts)\n        ? s.hr_contacts\n        : []\n    ),\n\n  'Flagged HR Contacts':\n    jsonText(\n      Array.isArray(s.flagged_hr_contacts)\n        ? s.flagged_hr_contacts\n        : []\n    ),\n\n\n  // ---------- Persona ----------\n\n  'Persona Fit':\n    s.persona_fit ?? null,\n\n  'Persona Function':\n    s.persona_function ?? null,\n\n  'Persona Seniority':\n    s.persona_seniority ?? null,\n\n  'Persona Classification Reason':\n    s.persona_fit_evidence?.classification_reason ?? null,\n\n\n  // ---------- Confidence ----------\n\n  'Data Confidence':\n    s.data_confidence ?? null,\n\n  'Data Confidence Reasons':\n    jsonText(\n      Array.isArray(s.data_confidence_reasons)\n        ? s.data_confidence_reasons\n        : []\n    ),\n\n\n  // ---------- Sales Intelligence ----------\n\n  'Company Context':\n    jsonText(\n      tr.company_context ?? null\n    ),\n\n  // This is the NEW structured field,\n  // not the old legacy \"Sales Brief\".\n  'Sales Brief Structured':\n    jsonText(\n      tr.sales_brief ?? null\n    ),\n\n  'Sales Brief Status':\n    tr.sales_brief_status ?? null,\n\n\n  // ---------- Execution ----------\n\n  'Processing Started At':\n    s.processing_started_at ?? null,\n\n'Completed At':\n    s.core_completed_at ?? null,\n\n  'Last Run ID':\n    s.run_id,\n\n  ...(s._ui || {})\n};\n\n\n// ============================================================\n// 5. Persistence payload\n// ============================================================\n\nreturn [{\n  json: {\n    ...s,\n\n    _airtable_write: {\n      operation: 'UPDATE_RECORD',\n\n      record_id:\n        s.airtable_record_id,\n\n      fields\n    },\n\n    _parent: {\n      ...(s._parent || {}),\n      stage: 'AIRTABLE_WRITE_READY'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        -592
+      ],
+      "id": "2a6e4e6a-8586-485e-b9a9-5c4a77d73813",
+      "name": "Build Final Airtable  Projection"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nconst write = s._airtable_write;\n\nif (\n  !write ||\n  typeof write !== 'object' ||\n  Array.isArray(write)\n) {\n  throw new Error(\n    'AIRTABLE_PERSISTENCE_ERROR: _airtable_write missing'\n  );\n}\n\nif (write.operation !== 'UPDATE_RECORD') {\n  throw new Error(\n    `AIRTABLE_PERSISTENCE_ERROR: unsupported operation ${write.operation}`\n  );\n}\n\nif (\n  typeof write.record_id !== 'string' ||\n  !write.record_id.trim()\n) {\n  throw new Error(\n    'AIRTABLE_PERSISTENCE_ERROR: record_id missing'\n  );\n}\n\nif (\n  !write.fields ||\n  typeof write.fields !== 'object' ||\n  Array.isArray(write.fields)\n) {\n  throw new Error(\n    'AIRTABLE_PERSISTENCE_ERROR: fields missing'\n  );\n}\n\n\n// Guard against our synthetic fixture.\nconst fixtureRecordIds = new Set([\n  'rec_parent_verified_001'\n]);\n\nconst writeAllowed =\n  !fixtureRecordIds.has(write.record_id);\n\n\nreturn [{\n  json: {\n    ...s,\n\n    _airtable_request: {\n      method: 'PATCH',\n\n      record_id: write.record_id,\n\n      write_allowed: writeAllowed,\n\n      body: {\n        fields: {\n          ...write.fields\n        },\n\n        typecast: false\n      }\n    },\n\n    _parent: {\n      ...(s._parent || {}),\n      stage: writeAllowed\n        ? 'AIRTABLE_UPDATE_PREPARED'\n        : 'AIRTABLE_UPDATE_BLOCKED_FIXTURE'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        -592
+      ],
+      "id": "3298b7d9-4efd-4268-8204-8dc0b0e883f7",
+      "name": "Prepare Airtable Update"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\nconst req = s._airtable_request;\n\nif (\n  !req ||\n  typeof req !== 'object' ||\n  Array.isArray(req)\n) {\n  throw new Error(\n    'AIRTABLE_PERSISTENCE_ERROR: _airtable_request missing'\n  );\n}\n\nif (req.write_allowed !== true) {\n  throw new Error(\n    'AIRTABLE_PERSISTENCE_ERROR: write is not allowed'\n  );\n}\n\nif (\n  typeof req.record_id !== 'string' ||\n  !req.record_id.trim()\n) {\n  throw new Error(\n    'AIRTABLE_PERSISTENCE_ERROR: record_id missing'\n  );\n}\n\nif (\n  !req.body ||\n  !req.body.fields ||\n  typeof req.body.fields !== 'object' ||\n  Array.isArray(req.body.fields)\n) {\n  throw new Error(\n    'AIRTABLE_PERSISTENCE_ERROR: fields missing'\n  );\n}\n\n\n// Airtable Update node с Auto-map должен получить\n// только record id + реальные Airtable field names.\n// Никаких служебных _parent / _airtable_request сюда не переносим.\nreturn [{\n  json: {\n    id: req.record_id,\n    ...req.body.fields\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3328,
+        -592
+      ],
+      "id": "6a72d4a2-0f46-43b5-8905-857858d0848b",
+      "name": "Prepare Airtable Row"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "10adce90-0bfb-46b5-a1ca-80e80233f477",
+              "leftValue": "={{ $json._airtable_request.write_allowed}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2912,
+        -592
+      ],
+      "id": "1a300d74-8084-428c-b318-71519eb3ebb9",
+      "name": "Check Airtable Write Allowed"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nreturn [{\n  json: {\n    ...s,\n    _parent: {\n      ...(s._parent || {}),\n      stage: 'AIRTABLE_WRITE_BLOCKED'\n    },\n    _airtable_persistence: {\n      status: 'BLOCKED',\n      reason:\n        s._airtable_request?.record_id === 'rec_parent_verified_001'\n          ? 'FIXTURE_RECORD'\n          : 'WRITE_NOT_ALLOWED'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3136,
+        -496
+      ],
+      "id": "58a323bd-9f3a-417c-9e1a-42eb91b085c1",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const actual = $input.first().json || {};\n\n// Берём именно тот persistence intent,\n// который был подготовлен ДО Airtable Update.\nlet source;\n\ntry {\n  source = $(\"Prepare Airtable Update\").first().json || {};\n} catch (e) {\n  throw new Error(\n    'AIRTABLE_PERSISTENCE_ERROR: cannot resolve persistence intent: ' +\n    String(e?.message || e)\n  );\n}\n\nconst req = source._airtable_request;\n\nif (\n  !req ||\n  typeof req !== 'object' ||\n  Array.isArray(req)\n) {\n  throw new Error(\n    'AIRTABLE_PERSISTENCE_ERROR: _airtable_request missing'\n  );\n}\n\nif (req.write_allowed !== true) {\n  throw new Error(\n    'AIRTABLE_PERSISTENCE_ERROR: verification reached for blocked write'\n  );\n}\n\nconst expectedId = req.record_id;\nconst expectedFields = req.body?.fields || {};\n\n\n// ============================================================\n// 1. Resolve Airtable record ID from response\n//\n// Support both common response shapes:\n// {\n//   id: \"rec...\",\n//   fields: {...}\n// }\n//\n// and flattened n8n output:\n// {\n//   id: \"rec...\",\n//   \"Result Status\": \"...\",\n//   ...\n// }\n// ============================================================\n\nconst actualId =\n  actual.id ??\n  actual.record_id ??\n  actual.recordId ??\n  null;\n\nif (!actualId) {\n  throw new Error(\n    'AIRTABLE_PERSISTENCE_ERROR: Airtable response has no record ID'\n  );\n}\n\nif (actualId !== expectedId) {\n  throw new Error(\n    `AIRTABLE_PERSISTENCE_ERROR: record ID mismatch; expected ${expectedId}, got ${actualId}`\n  );\n}\n\n\n// ============================================================\n// 2. Normalize returned fields\n// ============================================================\n\nlet actualFields;\n\nif (\n  actual.fields &&\n  typeof actual.fields === 'object' &&\n  !Array.isArray(actual.fields)\n) {\n  actualFields = actual.fields;\n} else {\n  actualFields = { ...actual };\n\n  delete actualFields.id;\n  delete actualFields.record_id;\n  delete actualFields.recordId;\n  delete actualFields.createdTime;\n}\n\n\n// ============================================================\n// 3. Verify critical persisted fields\n//\n// We deliberately verify the business-state sentinels,\n// not every huge JSON blob.\n// ============================================================\n\nconst criticalFields = [\n  'Enrichment Status',\n  'Result Status',\n  'Manual Review Needed',\n  'Routing Outcome',\n  'Account Fit',\n  'Persona Fit',\n  'Data Confidence',\n  'Sales Brief Status',\n  'Completed At',\n  'Last Run ID'\n];\n\nconst checked = [];\nconst unavailable = [];\n\nfor (const field of criticalFields) {\n\n  if (!(field in expectedFields)) {\n    continue;\n  }\n\nif (!(field in actualFields)) {\n  // Airtable omits unchecked checkbox fields from returned records.\n  if (\n    field === 'Manual Review Needed' &&\n    expectedFields[field] === false\n  ) {\n    checked.push(field);\n    continue;\n  }\n\n  unavailable.push(field);\n  continue;\n}\n\n  const expected = expectedFields[field];\n  const got = actualFields[field];\n\n  if (got !== expected) {\n    throw new Error(\n      `AIRTABLE_PERSISTENCE_ERROR: field mismatch at \"${field}\";  +\n      expected ${JSON.stringify(expected)}, got ${JSON.stringify(got)}`\n    );\n  }\n\n  checked.push(field);\n}\n\n\n// ============================================================\n// 4. Minimum acknowledgement rule\n// ============================================================\n//\n// Record ID equality is mandatory.\n//\n// If Airtable/n8n returned updated fields, they must match.\n// If node output only acknowledges the record ID, we preserve\n// that distinction instead of pretending full read-back occurred.\n// ============================================================\n\nconst verificationStatus =\n  unavailable.length === 0\n    ? 'VERIFIED_FROM_UPDATE_RESPONSE'\n    : 'WRITE_ACKNOWLEDGED_FIELDS_NOT_FULLY_RETURNED';\n\n\n// ============================================================\n// 5. Return canonical persistence result\n// ============================================================\n\nreturn [{\n  json: {\n    ...source,\n\n    _airtable_persistence: {\n      status: 'PERSISTED',\n\n      verification_status: verificationStatus,\n\n      record_id: actualId,\n\n      run_id:\n        source.run_id ?? null,\n\n      input_fingerprint:\n        source.input_fingerprint ?? null,\n      sales_intelligence_execution_id:\n        source.sales_intelligence\n          ?.sales_intelligence_execution_id ?? null,\n\n      sales_intelligence_generation:\n        source.sales_intelligence\n          ?.sales_intelligence_generation ?? null,\n\n      checked_fields: checked,\n\n      fields_not_returned_by_update_node:\n        unavailable\n    },\n\n    _parent: {\n      ...(source._parent || {}),\n      stage: 'AIRTABLE_PERSISTED'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3776,
+        -592
+      ],
+      "id": "b2ff6547-913a-45f1-a15e-d78fe0413f60",
+      "name": "Verify Airtable Persistence"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "base": {
+          "__rl": true,
+          "value": "appn5d5Ca7g9IyNMf",
+          "mode": "list",
+          "cachedResultName": "Clay Integration",
+          "cachedResultUrl": "https://airtable.com/appn5d5Ca7g9IyNMf"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblnUG3bEN2QqyKT4",
+          "mode": "list",
+          "cachedResultName": "Leads",
+          "cachedResultUrl": "https://airtable.com/appn5d5Ca7g9IyNMf/tblnUG3bEN2QqyKT4"
+        },
+        "id": "={{ $json._airtable_request.record_id }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        3088,
+        -896
+      ],
+      "id": "fddaa621-ddc1-422c-8b6c-4a8ab0a52af3",
+      "name": "Airtable Get Current Lead",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "J4FvBWdnYN3W0lwI",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const actual = $input.first().json || {};\n\nlet source;\n\ntry {\n  source = $(\"Prepare Airtable Update\").first().json || {};\n} catch (e) {\n  throw new Error(\n    'AIRTABLE_STALE_GUARD_ERROR: cannot resolve persistence intent: ' +\n    String(e?.message || e)\n  );\n}\n\nconst req = source._airtable_request;\n\nif (!req || req.write_allowed !== true) {\n  throw new Error(\n    'AIRTABLE_STALE_GUARD_ERROR: persistence intent missing or blocked'\n  );\n}\n\n\n// Airtable Get Record can return either:\n// { id, fields: {...} }\n// or flattened { id, \"Last Run ID\": ... }\n\nconst actualId =\n  actual.id ??\n  actual.record_id ??\n  actual.recordId ??\n  null;\n\nconst fields =\n  actual.fields &&\n  typeof actual.fields === 'object' &&\n  !Array.isArray(actual.fields)\n    ? actual.fields\n    : actual;\n\n\n// ------------------------------------------------------------\n// 1. Record identity\n// ------------------------------------------------------------\n\nif (!actualId) {\n  throw new Error(\n    'AIRTABLE_STALE_GUARD_ERROR: Airtable record ID missing'\n  );\n}\n\nif (actualId !== req.record_id) {\n  throw new Error(\n    `AIRTABLE_STALE_GUARD_ERROR: record mismatch; expected ${req.record_id}, got ${actualId}`\n  );\n}\n\n\n// ------------------------------------------------------------\n// 2. Current canonical run\n// ------------------------------------------------------------\n\nconst expectedRunId = source.run_id ?? null;\nconst currentRunId =\n  fields['Last Run ID'] ??\n  null;\n\nif (!expectedRunId) {\n  throw new Error(\n    'AIRTABLE_STALE_GUARD_ERROR: expected run_id missing'\n  );\n}\n\nconst canWrite =\n  currentRunId === expectedRunId;\n\n\n// ------------------------------------------------------------\n// 3. Return original persistence payload + guard result\n// ------------------------------------------------------------\n\nreturn [{\n  json: {\n    ...source,\n\n    _airtable_stale_guard: {\n      can_write: canWrite,\n\n      record_id: actualId,\n\n      expected_run_id: expectedRunId,\n      current_run_id: currentRunId,\n\n      current_enrichment_status:\n        fields['Enrichment Status'] ?? null,\n\n      current_result_status:\n        fields['Result Status'] ?? null,\n\n      reason: canWrite\n        ? 'CURRENT_RUN_MATCH'\n        : 'STALE_CORE_RUN'\n    },\n\n    _parent: {\n      ...(source._parent || {}),\n      stage: canWrite\n        ? 'AIRTABLE_CURRENT_RUN_CONFIRMED'\n        : 'AIRTABLE_STALE_CORE_RUN'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3312,
+        -896
+      ],
+      "id": "e3e3f7af-5d80-4d91-9b1d-6820d9153e99",
+      "name": "Guard Current Airtable Run"
+    },
+    {
+      "parameters": {
+        "jsCode": "const actual = $input.first().json || {};\n\nlet source;\n\ntry {\n  source = $(\"PARENT - Prepare Airtable Update\").first().json || {};\n} catch (e) {\n  throw new Error(\n    'AIRTABLE_STALE_GUARD_ERROR: cannot resolve persistence intent: ' +\n    String(e?.message || e)\n  );\n}\n\nconst req = source._airtable_request;\n\nif (!req || req.write_allowed !== true) {\n  throw new Error(\n    'AIRTABLE_STALE_GUARD_ERROR: persistence intent missing or blocked'\n  );\n}\n\n\n// Airtable Get Record can return either:\n// { id, fields: {...} }\n// or flattened { id, \"Last Run ID\": ... }\n\nconst actualId =\n  actual.id ??\n  actual.record_id ??\n  actual.recordId ??\n  null;\n\nconst fields =\n  actual.fields &&\n  typeof actual.fields === 'object' &&\n  !Array.isArray(actual.fields)\n    ? actual.fields\n    : actual;\n\n\n// ------------------------------------------------------------\n// 1. Record identity\n// ------------------------------------------------------------\n\nif (!actualId) {\n  throw new Error(\n    'AIRTABLE_STALE_GUARD_ERROR: Airtable record ID missing'\n  );\n}\n\nif (actualId !== req.record_id) {\n  throw new Error(\n    AIRTABLE_STALE_GUARD_ERROR: record mismatch; expected ${req.record_id}, got ${actualId}\n  );\n}\n\n\n// ------------------------------------------------------------\n// 2. Current canonical run\n// ------------------------------------------------------------\n\nconst expectedRunId = source.run_id ?? null;\nconst currentRunId =\n  fields['Last Run ID'] ??\n  null;\n\nif (!expectedRunId) {\n  throw new Error(\n    'AIRTABLE_STALE_GUARD_ERROR: expected run_id missing'\n  );\n}\n\nconst canWrite =\n  currentRunId === expectedRunId;\n\n\n// ------------------------------------------------------------\n// 3. Return original persistence payload + guard result\n// ------------------------------------------------------------\n\nreturn [{\n  json: {\n    ...source,\n\n    _airtable_stale_guard: {\n      can_write: canWrite,\n\n      record_id: actualId,\n\n      expected_run_id: expectedRunId,\n      current_run_id: currentRunId,\n\n      current_enrichment_status:\n        fields['Enrichment Status'] ?? null,\n\n      current_result_status:\n        fields['Result Status'] ?? null,\n\n      reason: canWrite\n        ? 'CURRENT_RUN_MATCH'\n        : 'STALE_CORE_RUN'\n    },\n\n    _parent: {\n      ...(source._parent || {}),\n      stage: canWrite\n        ? 'AIRTABLE_CURRENT_RUN_CONFIRMED'\n        : 'AIRTABLE_STALE_CORE_RUN'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3408,
+        -448
+      ],
+      "id": "721303ea-81d2-448c-919d-c6093a866535",
+      "name": "Airtable Stale Run"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nfunction fail(detail) {\n  return [{\n    json: {\n      ...s,\n      _parent_fail: {\n        code: 'INTERNAL_CONTRACT_ERROR',\n        stage: 'BUILD_2E_HR_DISCOVERY_REQUEST',\n        detail\n      },\n      _parent_route: 'FAILED'\n    }\n  }];\n}\n\n\n// ============================================================\n// 1. Entry-mode validation\n// ============================================================\n\nconst entryMode = s._2e_entry_mode;\n\nif (\n  entryMode !== 'ACCOUNT_ONLY' &&\n  entryMode !== 'VERIFIED_PERSON'\n) {\n  return fail(\n    `Invalid _2e_entry_mode: ${String(entryMode)}`\n  );\n}\n\n\n// ============================================================\n// 2. Layer 2E runtime config must already exist\n// ============================================================\n\nconst cfg = s.l2e_config || {};\n\nif (\n  cfg.classifier_execution_mode !== 'DETERMINISTIC_RULES' &&\n  cfg.classifier_execution_mode !== 'AI_CONSTRAINED'\n) {\n  return fail(\n    'Missing or invalid l2e_config.classifier_execution_mode'\n  );\n}\n\nif (\n  typeof cfg.hydration_endpoint_identity !== 'string' ||\n  !cfg.hydration_endpoint_identity.trim()\n) {\n  return fail(\n    'Missing l2e_config.hydration_endpoint_identity'\n  );\n}\n\nif (\n  typeof cfg.profile_endpoint_identity !== 'string' ||\n  !cfg.profile_endpoint_identity.trim()\n) {\n  return fail(\n    'Missing l2e_config.profile_endpoint_identity'\n  );\n}\n\n\n// ============================================================\n// 3. Canonical account validation\n// ============================================================\n\nif (s.account_resolution_status !== 'CONFIRMED') {\n  return fail(\n    `account_resolution_status must be CONFIRMED; got ${String(\n      s.account_resolution_status\n    )}`\n  );\n}\n\nconst account = s.account_company;\n\nif (\n  !account ||\n  typeof account !== 'object' ||\n  Array.isArray(account)\n) {\n  return fail('account_company is required');\n}\n\nconst apolloOrganizationId =\n  account.provider_refs?.apollo_organization_id ?? null;\n\nif (\n  typeof apolloOrganizationId !== 'string' ||\n  !apolloOrganizationId.trim()\n) {\n  return fail(\n    'account_company.provider_refs.apollo_organization_id is required for Apollo HR discovery'\n  );\n}\n\n\n// ============================================================\n// 4. Frozen Layer 2E discovery contract\n// ============================================================\n\nconst functions = [\n  'RECRUITING_OPERATIONS',\n  'TALENT_ACQUISITION',\n  'RECRUITING',\n  'PEOPLE',\n  'HR'\n];\n\nconst MAX_CANDIDATES = 15;\n\nconst request = {\n  provider: 'apollo',\n  operation: 'hr_people_discovery',\n\n  target_organization: {\n    name:\n      typeof account.name === 'string'\n        ? account.name\n        : null,\n\n    domain:\n      typeof account.domain === 'string'\n        ? account.domain\n        : null,\n\n    linkedin_url:\n      typeof account.linkedin_url === 'string'\n        ? account.linkedin_url\n        : null,\n\n    provider_refs: {\n      apollo_organization_id:\n        apolloOrganizationId\n    }\n  },\n\n  functions,\n\n  max_candidates: MAX_CANDIDATES\n};\n\n\n// ============================================================\n// 5. Remove old fixture/provider payloads\n//\n// Critical: a live run must not accidentally reuse pinned\n// _2e_provider_raw / fixture data from development tests.\n// ============================================================\n\nconst {\n  _2e_provider_raw,\n  _2e_transport,\n  _2e_hydration_fixture,\n  _2e_profile_fixture,\n  _2e_now,\n  ...cleanState\n} = s;\n\n\n// ============================================================\n// 6. Output\n// ============================================================\n\nreturn [{\n  json: {\n    ...cleanState,\n\n    _2e_discovery_request: request,\n\n    _parent: {\n      ...(s._parent || {}),\n      stage: '2E_HR_DISCOVERY_REQUEST_READY'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -272
+      ],
+      "id": "33ffbd69-9827-4fcf-94f1-6c899f902237",
+      "name": "PARENT - Build 2E HR Discovery Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nfunction fail(detail) {\n  return [{\n    json: {\n      ...s,\n      _parent_fail: {\n        code: 'INTERNAL_CONTRACT_ERROR',\n        stage: 'BUILD_APOLLO_HR_SEARCH',\n        detail\n      },\n      _parent_route: 'FAILED'\n    }\n  }];\n}\n\nconst req = s._2e_discovery_request;\n\nif (!req || req.provider !== 'apollo') {\n  return fail('Missing or invalid _2e_discovery_request');\n}\n\nconst orgId =\n  req.target_organization\n    ?.provider_refs\n    ?.apollo_organization_id;\n\nif (\n  typeof orgId !== 'string' ||\n  !orgId.trim()\n) {\n  return fail('Apollo organization ID missing');\n}\n\nconst maxCandidates = req.max_candidates;\n\nif (\n  !Number.isInteger(maxCandidates) ||\n  maxCandidates < 1 ||\n  maxCandidates > 15\n) {\n  return fail(\n    `Invalid max_candidates: ${String(maxCandidates)}`\n  );\n}\n\n\n// Provider-specific discovery seeds.\n// Broad enough for recall; frozen Layer 2E remains the semantic authority.\nconst personTitles = [\n  'recruiting operations',\n  'recruitment operations',\n  'talent acquisition operations',\n  'ta operations',\n  'recruiting program',\n  'recruitment program',\n\n  'talent acquisition',\n  'talent sourcing',\n  'talent partner',\n  'talent recruiter',\n  'talent recruiting',\n  'sourcer',\n\n  'recruiter',\n  'recruiting',\n  'recruitment',\n  'staffing',\n  'headhunter',\n  'headhunting',\n\n  'people operations',\n  'people ops',\n  'people partner',\n  'people and culture',\n  'employee experience',\n  'talent management',\n  'talent development',\n  'people analytics',\n  'chief people officer',\n  'chief talent officer',\n\n  'human resources',\n  'human resource',\n  'human resources business partner',\n  'hr business partner',\n  'employee relations',\n  'hr',\n  'hrbp',\n  'hris'\n];\n\nconst params = [];\n\nparams.push(\n  'organization_ids[]=' +\n  encodeURIComponent(orgId.trim())\n);\n\nfor (const title of personTitles) {\n  params.push(\n    'person_titles[]=' +\n    encodeURIComponent(title)\n  );\n}\n\nparams.push('include_similar_titles=true');\nparams.push('page=1');\nparams.push(\n  'per_page=' +\n  encodeURIComponent(String(maxCandidates))\n);\n\nconst url =\n  'https://api.apollo.io/api/v1/mixed_people/api_search?' +\n  params.join('&');\n\nreturn [{\n  json: {\n    ...s,\n\n    _2e_apollo_search_request: {\n      provider: 'apollo',\n      operation: 'hr_people_discovery',\n      method: 'POST',\n      url,\n      organization_id: orgId.trim(),\n      person_titles: personTitles,\n      page: 1,\n      per_page: maxCandidates\n    },\n\n    _parent: {\n      ...(s._parent || {}),\n      stage: '2E_APOLLO_HR_SEARCH_READY'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        -272
+      ],
+      "id": "5b7bdb28-055e-4d9d-9a31-e804010cf4eb",
+      "name": "PARENT - Build Apollo HR Search"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json._2e_apollo_search_request.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        288,
+        -272
+      ],
+      "id": "4e0815c0-3f32-419a-b902-8602ead381f2",
+      "name": "PARENT - Apollo HR Search",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KVT6aZ7oOpZjoj5a",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json || {};\n\nlet source;\n\ntry {\n  source = $(\"PARENT - Build Apollo HR Search\").first().json || {};\n} catch (e) {\n  throw new Error(\n    'L2E_APOLLO_ADAPTER_ERROR: cannot resolve pre-search state: ' +\n    String(e?.message || e)\n  );\n}\n\n\n// ============================================================\n// 1. Normalize possible n8n HTTP response shapes\n//\n// HTTP Request may return either:\n//   { people: [...] }\n// or\n//   { statusCode, headers, body: { people: [...] } }\n// ============================================================\n\nconst body =\n  raw.body &&\n  typeof raw.body === 'object' &&\n  !Array.isArray(raw.body)\n    ? raw.body\n    : raw;\n\nconst explicitStatus =\n  Number.isInteger(raw.statusCode)\n    ? raw.statusCode\n    : Number.isInteger(raw.status)\n      ? raw.status\n      : null;\n\n\n// ============================================================\n// 2. Detect provider/transport failure\n// ============================================================\n\nconst people = body?.people;\n\nif (!Array.isArray(people)) {\n\n  const errorMessage =\n    raw.error?.message ??\n    raw.error ??\n    raw.message ??\n    body?.message ??\n    null;\n\n  return [{\n    json: {\n      ...source,\n\n      _2e_provider_raw: {\n        provider: 'apollo',\n        envelope_valid: false,\n        candidates: []\n      },\n\n      _2e_transport: {\n        attempts: 1,\n        http_status: explicitStatus,\n        error_code:\n          explicitStatus === 401\n            ? 'AUTHENTICATION_FAILED'\n            : explicitStatus === 403\n              ? 'FORBIDDEN'\n              : explicitStatus === 429\n                ? 'RATE_LIMITED'\n                : explicitStatus !== null && explicitStatus >= 500\n                  ? 'PROVIDER_SERVER_ERROR'\n                  : 'INVALID_PROVIDER_RESPONSE',\n\n        transport_class:\n          explicitStatus === 401 || explicitStatus === 403\n            ? 'AUTHORIZATION_FAILURE'\n            : explicitStatus === 429\n              ? 'RATE_LIMIT'\n              : explicitStatus !== null && explicitStatus >= 500\n                ? 'TRANSIENT_PROVIDER_FAILURE'\n                : 'INVALID_SHARED_ENVELOPE',\n\n        transient_exhausted:\n          explicitStatus === 429 ||\n          (explicitStatus !== null && explicitStatus >= 500),\n\n        raw_error_message:\n          errorMessage === null\n            ? null\n            : String(errorMessage).slice(0, 1000)\n      },\n\n      _2e_now: new Date().toISOString(),\n\n      _parent: {\n        ...(source._parent || {}),\n        stage: '2E_APOLLO_HR_SEARCH_ADAPTED_FAILED'\n      }\n    }\n  }];\n}\n\n\n// ============================================================\n// 3. Convert Apollo people[] into frozen 2E raw candidates\n//\n// Important:\n// - Apollo person ID is retained as the strong provider identity.\n// - Search result title is retained.\n// - Search does NOT give us a safe full name or LinkedIn URL.\n// - Full identity hydration happens later.\n// ============================================================\n\nconst candidates = people.map((p, index) => {\n  const person =\n    p && typeof p === 'object' && !Array.isArray(p)\n      ? p\n      : {};\n\n  const personId =\n    typeof person.id === 'string' &&\n    person.id.trim()\n      ? person.id.trim()\n      : null;\n\n  const title =\n    typeof person.title === 'string' &&\n    person.title.trim()\n      ? person.title.trim()\n      : null;\n\n  const organizationName =\n    typeof person.organization?.name === 'string' &&\n    person.organization.name.trim()\n      ? person.organization.name.trim()\n      : null;\n\n  return {\n    person_id: personId,\n\n    // Do NOT turn Apollo's obfuscated search name\n    // into canonical identity evidence.\n    name: null,\n\n    linkedin_url: null,\n\n    title,\n\n    organization_name: organizationName,\n\n    provider_rank: index + 1\n  };\n});\n\n\n// ============================================================\n// 4. Provider metadata\n// ============================================================\n\nconst totalEntries =\n  Number.isInteger(body.total_entries)\n    ? body.total_entries\n    : null;\n// ============================================================\n// 5. Return state expected by frozen Layer 2E\n// ============================================================\n\nreturn [{\n  json: {\n    ...source,\n\n    _2e_provider_raw: {\n      provider: 'apollo',\n      envelope_valid: true,\n      candidates,\n\n      provider_metadata: {\n        total_entries: totalEntries,\n        returned_count: candidates.length\n      }\n    },\n\n    _2e_transport: {\n      attempts: 1,\n      http_status:\n        explicitStatus ?? 200,\n\n      error_code: null,\n      transport_class: 'SUCCESS',\n      transient_exhausted: false\n    },\n\n    _2e_now: new Date().toISOString(),\n\n    _parent: {\n      ...(source._parent || {}),\n      stage: '2E_APOLLO_HR_SEARCH_ADAPTED'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -368
+      ],
+      "id": "93cd236c-4280-4462-9481-755147dad235",
+      "name": "PARENT - Adapt Apollo HR Search"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "value": "appn5d5Ca7g9IyNMf",
+          "mode": "list",
+          "cachedResultName": "Clay Integration",
+          "cachedResultUrl": "https://airtable.com/appn5d5Ca7g9IyNMf"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblnUG3bEN2QqyKT4",
+          "mode": "list",
+          "cachedResultName": "Leads",
+          "cachedResultUrl": "https://airtable.com/appn5d5Ca7g9IyNMf/tblnUG3bEN2QqyKT4"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "Manual Review Needed": false,
+            "Is Personal Domain": false,
+            "Is Role Inbox": false,
+            "Is System Inbox": false
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Last Name",
+              "displayName": "Last Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Full name from leads",
+              "displayName": "Full name from leads",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Enrichment Status",
+              "displayName": "Enrichment Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "completed",
+                  "value": "completed"
+                },
+                {
+                  "name": "processing",
+                  "value": "processing"
+                },
+                {
+                  "name": "manual_review",
+                  "value": "manual_review"
+                },
+                {
+                  "name": "privacy_stop",
+                  "value": "privacy_stop"
+                },
+                {
+                  "name": "invalid_input",
+                  "value": "invalid_input"
+                },
+                {
+                  "name": "failed",
+                  "value": "failed"
+                },
+                {
+                  "name": "invalid_domain",
+                  "value": "invalid_domain"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Manual Review Needed",
+              "displayName": "Manual Review Needed",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Record ID",
+              "displayName": "Record ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Account Fit",
+              "displayName": "Account Fit",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "HIGH",
+                  "value": "HIGH"
+                },
+                {
+                  "name": "MEDIUM",
+                  "value": "MEDIUM"
+                },
+                {
+                  "name": "LOW",
+                  "value": "LOW"
+                },
+                {
+                  "name": "UNKNOWN",
+                  "value": "UNKNOWN"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Persona Fit",
+              "displayName": "Persona Fit",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "HIGH",
+                  "value": "HIGH"
+                },
+                {
+                  "name": "MEDIUM",
+                  "value": "MEDIUM"
+                },
+                {
+                  "name": "LOW",
+                  "value": "LOW"
+                },
+                {
+                  "name": "UNKNOWN",
+                  "value": "UNKNOWN"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Data Confidence",
+              "displayName": "Data Confidence",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "HIGH",
+                  "value": "HIGH"
+                },
+                {
+                  "name": "MEDIUM",
+                  "value": "MEDIUM"
+                },
+                {
+                  "name": "LOW",
+                  "value": "LOW"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Sales Brief",
+              "displayName": "Sales Brief",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Account Resolution Reason",
+              "displayName": "Account Resolution Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Account Company",
+              "displayName": "Account Company",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Org Relationship Reason",
+              "displayName": "Org Relationship Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Result Status",
+              "displayName": "Result Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "pending",
+                  "value": "pending"
+                },
+                {
+                  "name": "completed",
+                  "value": "completed"
+                },
+                {
+                  "name": "invalid",
+                  "value": "invalid"
+                },
+                {
+                  "name": "manual",
+                  "value": "manual"
+                },
+                {
+                  "name": "failed",
+                  "value": "failed"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Account Resolution Status",
+              "displayName": "Account Resolution Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "CONFIRMED",
+                  "value": "CONFIRMED"
+                },
+                {
+                  "name": "AMBIGUOUS",
+                  "value": "AMBIGUOUS"
+                },
+                {
+                  "name": "NOT_FOUND",
+                  "value": "NOT_FOUND"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Person Resolution Status",
+              "displayName": "Person Resolution Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "CONFIRMED",
+                  "value": "CONFIRMED"
+                },
+                {
+                  "name": "AMBIGUOUS",
+                  "value": "AMBIGUOUS"
+                },
+                {
+                  "name": "NOT_FOUND",
+                  "value": "NOT_FOUND"
+                },
+                {
+                  "name": "SKIPPED_INVALID_NAME",
+                  "value": "SKIPPED_INVALID_NAME"
+                },
+                {
+                  "name": "SKIPPED_PRIVACY",
+                  "value": "SKIPPED_PRIVACY"
+                },
+                {
+                  "name": "SKIPPED_ROLE_INBOX",
+                  "value": "SKIPPED_ROLE_INBOX"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Person",
+              "displayName": "Person",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Organization Relationship",
+              "displayName": "Organization Relationship",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "SAME_ENTITY",
+                  "value": "SAME_ENTITY"
+                },
+                {
+                  "name": "SUBSIDIARY",
+                  "value": "SUBSIDIARY"
+                },
+                {
+                  "name": "PARENT",
+                  "value": "PARENT"
+                },
+                {
+                  "name": "BRAND_OR_BUSINESS_UNIT",
+                  "value": "BRAND_OR_BUSINESS_UNIT"
+                },
+                {
+                  "name": "UNRELATED",
+                  "value": "UNRELATED"
+                },
+                {
+                  "name": "UNKNOWN",
+                  "value": "UNKNOWN"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Domain Status",
+              "displayName": "Domain Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "BUSINESS",
+                  "value": "BUSINESS"
+                },
+                {
+                  "name": "FREE_EMAIL",
+                  "value": "FREE_EMAIL"
+                },
+                {
+                  "name": "INVALID_FORMAT",
+                  "value": "INVALID_FORMAT"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Name Quality",
+              "displayName": "Name Quality",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "VALID",
+                  "value": "VALID"
+                },
+                {
+                  "name": "SUSPICIOUS",
+                  "value": "SUSPICIOUS"
+                },
+                {
+                  "name": "INVALID",
+                  "value": "INVALID"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Matched Employer",
+              "displayName": "Matched Employer",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Person Resolution Reason",
+              "displayName": "Person Resolution Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Inbound Employer Verification",
+              "displayName": "Inbound Employer Verification",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Input Rejection Reason",
+              "displayName": "Input Rejection Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "personal_email",
+                  "value": "personal_email"
+                },
+                {
+                  "name": "invalid_email",
+                  "value": "invalid_email"
+                },
+                {
+                  "name": "system_inbox",
+                  "value": "system_inbox"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Name Quality Reason",
+              "displayName": "Name Quality Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Matched Employer Candidate",
+              "displayName": "Matched Employer Candidate",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Is Personal Domain",
+              "displayName": "Is Personal Domain",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Is Role Inbox",
+              "displayName": "Is Role Inbox",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "HR Discovery Status",
+              "displayName": "HR Discovery Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "success",
+                  "value": "success"
+                },
+                {
+                  "name": "empty",
+                  "value": "empty"
+                },
+                {
+                  "name": "failed",
+                  "value": "failed"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Org Relationship Source",
+              "displayName": "Org Relationship Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Persona Function",
+              "displayName": "Persona Function",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "RECRUITING",
+                  "value": "RECRUITING"
+                },
+                {
+                  "name": "TALENT_ACQUISITION",
+                  "value": "TALENT_ACQUISITION"
+                },
+                {
+                  "name": "RECRUITING_OPERATIONS",
+                  "value": "RECRUITING_OPERATIONS"
+                },
+                {
+                  "name": "HR",
+                  "value": "HR"
+                },
+                {
+                  "name": "PEOPLE",
+                  "value": "PEOPLE"
+                },
+                {
+                  "name": "GENERAL_MANAGEMENT",
+                  "value": "GENERAL_MANAGEMENT"
+                },
+                {
+                  "name": "OTHER",
+                  "value": "OTHER"
+                },
+                {
+                  "name": "UNKNOWN",
+                  "value": "UNKNOWN"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Org Relationship Evidence",
+              "displayName": "Org Relationship Evidence",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "HR Contacts",
+              "displayName": "HR Contacts",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Flagged HR Contacts",
+              "displayName": "Flagged HR Contacts",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Persona Classification Reason",
+              "displayName": "Persona Classification Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Manual Review Reason",
+              "displayName": "Manual Review Reason",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "company_not_found",
+                  "value": "company_not_found"
+                },
+                {
+                  "name": "account_company_ambiguous",
+                  "value": "account_company_ambiguous"
+                },
+                {
+                  "name": "person_identity_ambiguous",
+                  "value": "person_identity_ambiguous"
+                },
+                {
+                  "name": "employer_unverified",
+                  "value": "employer_unverified"
+                },
+                {
+                  "name": "employer_ambiguous",
+                  "value": "employer_ambiguous"
+                },
+                {
+                  "name": "employer_account_conflict",
+                  "value": "employer_account_conflict"
+                },
+                {
+                  "name": "employer_account_relationship_unverified",
+                  "value": "employer_account_relationship_unverified"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Persona Seniority",
+              "displayName": "Persona Seniority",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "EXECUTIVE",
+                  "value": "EXECUTIVE"
+                },
+                {
+                  "name": "HEAD_DIRECTOR",
+                  "value": "HEAD_DIRECTOR"
+                },
+                {
+                  "name": "MANAGER_LEAD",
+                  "value": "MANAGER_LEAD"
+                },
+                {
+                  "name": "SENIOR",
+                  "value": "SENIOR"
+                },
+                {
+                  "name": "INDIVIDUAL_CONTRIBUTOR",
+                  "value": "INDIVIDUAL_CONTRIBUTOR"
+                },
+                {
+                  "name": "JUNIOR",
+                  "value": "JUNIOR"
+                },
+                {
+                  "name": "UNKNOWN",
+                  "value": "UNKNOWN"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Data Confidence Reasons",
+              "displayName": "Data Confidence Reasons",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Last Run ID",
+              "displayName": "Last Run ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Account Fit Reasons",
+              "displayName": "Account Fit Reasons",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Routing Outcome",
+              "displayName": "Routing Outcome",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "SALES_HIGH_PRIORITY",
+                  "value": "SALES_HIGH_PRIORITY"
+                },
+                {
+                  "name": "SALES_STANDARD",
+                  "value": "SALES_STANDARD"
+                },
+                {
+                  "name": "ACCOUNT_OPPORTUNITY",
+                  "value": "ACCOUNT_OPPORTUNITY"
+                },
+                {
+                  "name": "ACCOUNT_REVIEW",
+                  "value": "ACCOUNT_REVIEW"
+                },
+                {
+                  "name": "NURTURE",
+                  "value": "NURTURE"
+                },
+                {
+                  "name": "DISQUALIFIED_FIT",
+                  "value": "DISQUALIFIED_FIT"
+                },
+                {
+                  "name": "MANUAL_REVIEW",
+                  "value": "MANUAL_REVIEW"
+                },
+                {
+                  "name": "PRIVACY_STOP",
+                  "value": "PRIVACY_STOP"
+                },
+                {
+                  "name": "INVALID_INPUT",
+                  "value": "INVALID_INPUT"
+                },
+                {
+                  "name": "FAILED",
+                  "value": "FAILED"
+                },
+                {
+                  "name": "INVALID_DOMAIN",
+                  "value": "INVALID_DOMAIN"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Company Context",
+              "displayName": "Company Context",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Processing Started At",
+              "displayName": "Processing Started At",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Completed At",
+              "displayName": "Completed At",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Is System Inbox",
+              "displayName": "Is System Inbox",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Account Resolution Evidence",
+              "displayName": "Account Resolution Evidence",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Person Resolution Evidence",
+              "displayName": "Person Resolution Evidence",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Account Resolution",
+              "displayName": "Account Resolution",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Provider Diagnostics",
+              "displayName": "Provider Diagnostics",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Account Candidates",
+              "displayName": "Account Candidates",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Sales Brief Status",
+              "displayName": "Sales Brief Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "generated",
+                  "value": "generated"
+                },
+                {
+                  "name": "failed",
+                  "value": "failed"
+                },
+                {
+                  "name": "skipped",
+                  "value": "skipped"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Sales Brief Structured",
+              "displayName": "Sales Brief Structured",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "position": [
+        3552,
+        -592
+      ],
+      "id": "7e2156f7-7331-487d-a2e4-6222516b0dc4",
+      "name": "Create or update a record",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "J4FvBWdnYN3W0lwI",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\n// ============================================================\n// 1. Sales Brief\n// ============================================================\n\nconst brief =\n  s.sales_intelligence?.terminal_result?.sales_brief || {};\n\nconst account = {\n  ...(s.account_company || {}),\n  ...(brief.account || {})\n};\n\nconst inbound =\n  brief.inbound_contact ||\n  s.person ||\n  {};\n\nconst contacts =\n  Array.isArray(brief.hr?.contacts)\n    ? brief.hr.contacts\n    : Array.isArray(s.hr_contacts)\n      ? s.hr_contacts\n      : [];\n\n// ============================================================\n// 2. Why Now signals\n//\n// Canonical current_context stays primary.\n// We supplement it with useful research_evidence so product\n// launches / expansion / funding etc. are not lost from the UI.\n// ============================================================\n\nconst currentSignals =\n  Array.isArray(brief.current_context)\n    ? brief.current_context\n    : [];\n\nconst researchEvidence =\n  Array.isArray(\n    s.sales_intelligence\n      ?.terminal_result\n      ?.company_context\n      ?.data\n      ?.research_evidence\n  )\n    ? s.sales_intelligence\n        .terminal_result\n        .company_context\n        .data\n        .research_evidence\n    : [];\n\nconst hypotheses =\n  Array.isArray(brief.sales_hypotheses)\n    ? brief.sales_hypotheses\n    : [];\n\n// Signals that generated a sales hypothesis.\nconst hypothesisSignalIds = new Set(\n  hypotheses\n    .map(h => h?.signal_id)\n    .filter(Boolean)\n);\n\n// Supplement canonical current_context with useful company events.\n//\n// Exclude:\n// - inconsistent signals\n// - explicit target conflicts\n//\n// Keep:\n// - product / market launches\n// - expansion\n// - funding\n// - partnerships / acquisitions\n// - recruiting expansion\n// - hiring\nconst usefulResearchSignals = researchEvidence\n  .filter(signal =>\n    signal &&\n    signal.classification_status === \"CONSISTENT\" &&\n    signal.target_binding !== \"CONFLICT\" &&\n    [\n      \"PRODUCT_OR_MARKET_LAUNCH\",\n      \"COMPANY_EXPANSION\",\n      \"FUNDING_OR_INVESTMENT\",\n      \"PARTNERSHIP_OR_ACQUISITION\",\n      \"RECRUITING_EXPANSION\",\n      \"HIRING_SIGNAL\"\n    ].includes(signal.signal_type)\n  )\n  .map(signal => ({\n    ...signal,\n\n    // research_evidence may not carry canonical freshness\n    evidence_freshness:\n      signal.evidence_freshness || null\n  }));\n\n// ============================================================\n// 3. Merge + deduplicate signals\n// ============================================================\n\nconst seenSignals = new Set();\n\nconst mergedSignals = [\n  ...currentSignals,\n  ...usefulResearchSignals\n].filter(signal => {\n  const key = [\n    signal?.signal_type || \"\",\n    signal?.source_url || \"\",\n    signal?.evidence_excerpt || \"\"\n  ].join(\"|\");\n\n  if (seenSignals.has(key)) {\n    return false;\n  }\n\n  seenSignals.add(key);\n  return true;\n});\n\n// Mark signals that came from canonical current_context.\nconst currentSignalKeys = new Set(\n  currentSignals.map(signal =>\n    [\n      signal?.signal_type || \"\",\n      signal?.source_url || \"\",\n      signal?.evidence_excerpt || \"\"\n    ].join(\"|\")\n  )\n);\n\n// Ranking:\n//\n// 1. Signal that generated a sales hypothesis\n// 2. Canonical current_context\n// 3. First-party research evidence\n// 4. Remaining useful research evidence\n//\n// Limit UI to three signals.\nconst signals = [...mergedSignals]\n  .sort((a, b) => {\n    const aHypothesis =\n      hypothesisSignalIds.has(a?.signal_id) ? 1 : 0;\n\n    const bHypothesis =\n      hypothesisSignalIds.has(b?.signal_id) ? 1 : 0;\n\n    if (aHypothesis !== bHypothesis) {\n      return bHypothesis - aHypothesis;\n    }\n\n    const aKey = [\n      a?.signal_type || \"\",\n      a?.source_url || \"\",\n      a?.evidence_excerpt || \"\"\n    ].join(\"|\");\n\n    const bKey = [\n      b?.signal_type || \"\",\n      b?.source_url || \"\",\n      b?.evidence_excerpt || \"\"\n    ].join(\"|\");\n\n    const aCurrent =\n      currentSignalKeys.has(aKey) ? 1 : 0;\n\n    const bCurrent =\n      currentSignalKeys.has(bKey) ? 1 : 0;\n\n    if (aCurrent !== bCurrent) {\n      return bCurrent - aCurrent;\n    }\n    const aFirstParty =\n      a?.source_type === \"FIRST_PARTY\" ? 1 : 0;\n\n    const bFirstParty =\n      b?.source_type === \"FIRST_PARTY\" ? 1 : 0;\n\n    return bFirstParty - aFirstParty;\n  })\n  .slice(0, 3);\n\n// ============================================================\n// 4. Helpers\n// ============================================================\n\nfunction url(value) {\n  if (!value) return null;\n\n  const v = String(value).trim();\n\n  if (!v) return null;\n\n  if (/^https?:\\/\\//i.test(v)) {\n    return v;\n  }\n\n  return `https://${v}`;\n}\n\nfunction contact(index) {\n  return contacts[index] || {};\n}\n\nfunction signal(index) {\n  return signals[index] || {};\n}\n\nfunction hypothesis(index) {\n  return hypotheses[index] || {};\n}\n\nfunction humanizeEnum(value) {\n  if (!value) return null;\n\n  const overrides = {\n    // Routing outcomes\n    ACCOUNT_OPPORTUNITY: \"Account Opportunity\",\n    SALES_HIGH_PRIORITY: \"High Priority Sales\",\n    SALES_STANDARD: \"Standard Sales\",\n    NURTURE: \"Nurture\",\n    ACCOUNT_REVIEW: \"Account Review\",\n    DISQUALIFIED_FIT: \"Disqualified\",\n    MANUAL_REVIEW: \"Manual Review\",\n    PRIVACY_STOP: \"Privacy Stop\",\n    INVALID_INPUT: \"Invalid Input\",\n    FAILED: \"Failed\",\n\n    // Persona function\n    TALENT_ACQUISITION: \"Talent Acquisition\",\n    RECRUITING_OPERATIONS: \"Recruiting Operations\",\n    RECRUITING: \"Recruiting\",\n    PEOPLE: \"People\",\n    HR: \"HR\",\n    GENERAL_MANAGEMENT: \"General Management\",\n    OTHER: \"Other\",\n    UNKNOWN: \"Unknown\",\n\n    // Persona seniority\n    EXECUTIVE: \"Executive\",\n    HEAD_DIRECTOR: \"Head / Director\",\n    MANAGER_LEAD: \"Manager / Lead\",\n    SENIOR: \"Senior\",\n    JUNIOR: \"Junior\",\n    INDIVIDUAL_CONTRIBUTOR: \"Individual Contributor\",\n\n    // Signals\n    HIRING_SIGNAL: \"Hiring Signal\",\n    RECRUITING_EXPANSION: \"Recruiting Expansion\",\n    WORKFORCE_REDUCTION: \"Workforce Reduction\",\n    ORGANIZATIONAL_CHANGE: \"Organizational Change\",\n    COMPANY_EXPANSION: \"Company Expansion\",\n    FUNDING_OR_INVESTMENT: \"Funding / Investment\",\n    PRODUCT_OR_MARKET_LAUNCH: \"Product / Market Launch\",\n    PARTNERSHIP_OR_ACQUISITION: \"Partnership / Acquisition\",\n    OTHER_RELEVANT: \"Other Relevant Signal\"\n  };\n\n  if (overrides[value]) {\n    return overrides[value];\n  }\n\n  return String(value)\n    .toLowerCase()\n    .replace(/_/g, \" \")\n    .replace(/\\b\\w/g, char => char.toUpperCase());\n}\n\n\nfunction humanizeRoutingReason(value) {\n  if (!value) return null;\n\n  const overrides = {\n    MEDIUM_ACCOUNT_PERSONA_UNKNOWN:\n      \"Medium account fit · Persona unknown\",\n\n    HIGH_ACCOUNT_HIGH_PERSONA:\n      \"Strong account and persona fit\",\n\n    HIGH_ACCOUNT_MEDIUM_PERSONA:\n      \"Strong account fit · Medium persona fit\",\n\n    MEDIUM_ACCOUNT_HIGH_PERSONA:\n      \"Medium account fit · Strong persona fit\",\n\n    LOW_ACCOUNT_FIT:\n      \"Low account fit\",\n\n    PERSONA_UNKNOWN:\n      \"Persona could not be confidently classified\"\n  };\n\n  return overrides[value] || humanizeEnum(value);\n}\n// Clean noisy scraped evidence for Softr.\n//\n// Canonical Sales Intelligence evidence remains untouched.\nfunction cleanSignalText(value) {\n  if (!value) return null;\n\n  let text = String(value)\n    .replace(/\\s+/g, \" \")\n    .trim();\n\n  if (!text) return null;\n\n  // Careers pages sometimes return navigation and vacancy-list noise.\n  if (/explore our open roles/i.test(text)) {\n    return \"Explore our open roles.\";\n  }\n\n  // Keep the Softr cards compact.\n  const MAX_LENGTH = 220;\n\n  if (text.length > MAX_LENGTH) {\n    const shortened = text\n      .slice(0, MAX_LENGTH - 3)\n      .replace(/\\s+\\S*$/, \"\")\n      .trim();\n\n    return `${shortened}...`;\n  }\n\n  return text;\n}\n\n// Canonical rendered_text contains:\n//\n// Source-attributed context\n// Potential relevance\n// Generic caveat\n//\n// Softr only needs the actual sales angle.\nfunction extractPotentialRelevance(value) {\n  if (!value) return null;\n\n  const text = String(value).trim();\n\n  if (!text) return null;\n\n  const match = text.match(\n    /Potential relevance:\\s*([\\s\\S]*?)(?:\\n\\s*\\nThis may be relevant|\\s*$)/i\n  );\n\n  if (match?.[1]) {\n    return match[1].trim();\n  }\n\n  // Safe fallback if SI wording changes later.\n  return text;\n}\n\n// ============================================================\n// 5. Select UI entities\n// ============================================================\n\nconst c1 = contact(0);\nconst c2 = contact(1);\nconst c3 = contact(2);\n\nconst sig1 = signal(0);\nconst sig2 = signal(1);\nconst sig3 = signal(2);\n\nconst h1 = hypothesis(0);\nconst h2 = hypothesis(1);\nconst h3 = hypothesis(2);\n\n// ============================================================\n// 6. Flat UI projection for Airtable / Softr\n// ============================================================\nfunction contactTitle(contact) {\n  if (!contact || typeof contact !== 'object') return null;\n\n  const candidates = [\n    contact.current_title,\n    contact.verified_title,\n    contact.provider_reported_title\n  ];\n\n  for (const value of candidates) {\n    if (typeof value === 'string' && value.trim()) {\n      return value.trim();\n    }\n  }\n\n  return null;\n}\nconst ui = {\n\n  // ----------------------------------------------------------\n  // Company\n  // ----------------------------------------------------------\n\n  \"UI Company Name\":\n    account.name || null,\n\n  \"UI Company Domain\":\n    account.domain || null,\n\n  \"UI Company Website\":\n    url(account.website_url),\n\n  \"UI Company Country\":\n    account.country || null,\n\n  \"UI Company Description\":\n    account.description || null,\n\n  \"UI Company LinkedIn\":\n    url(account.linkedin_url),\n\n  \"UI Employee Count\":\n    account.employee_count ?? null,\n\n  \"UI Industry\":\n    account.industry || null,\n\n  // ----------------------------------------------------------\n  // Fit / routing\n  // ----------------------------------------------------------\n\n  \"UI Account Fit\":\n    s.account_fit || null,\n\n  \"UI Persona Fit\":\n    s.persona_fit || null,\n\n\"UI Persona Function\":\n  humanizeEnum(s.persona_function),\n\n \"UI Persona Seniority\":\n  humanizeEnum(s.persona_seniority),\n\n  \"UI Data Confidence\":\n    s.data_confidence || null,\n\n \"UI Routing Outcome\":\n  humanizeEnum(s.routing_outcome),\n\n\"UI Routing Reason\":\n  humanizeRoutingReason(\n    s.routing_evidence?.decision_reason\n  ),\n\n  // ----------------------------------------------------------\n  // Inbound lead\n  // ----------------------------------------------------------\n\n  \"UI Inbound Name\":\n    inbound.resolved_name || null,\n\n  \"UI Inbound Title\":\n    inbound.current_title || null,\n\n  \"UI Inbound LinkedIn\":\n    url(inbound.linkedin_url),\n\n  // ----------------------------------------------------------\n  // Recommended contact 1\n  // ----------------------------------------------------------\n  \"UI Contact 1 Name\":\n    c1.name || null,\n\n\"UI Contact 1 Title\":\n  contactTitle(c1),\n\n  \"UI Contact 1 LinkedIn\":\n    url(c1.linkedin_url),\n\n  // ----------------------------------------------------------\n  // Recommended contact 2\n  // ----------------------------------------------------------\n\n  \"UI Contact 2 Name\":\n    c2.name || null,\n\n\"UI Contact 2 Title\":\n  contactTitle(c2),\n\n  \"UI Contact 2 LinkedIn\":\n    url(c2.linkedin_url),\n\n  // ----------------------------------------------------------\n  // Recommended contact 3\n  // ----------------------------------------------------------\n\n  \"UI Contact 3 Name\":\n    c3.name || null,\n\n\"UI Contact 3 Title\":\n  contactTitle(c3),\n\n  \"UI Contact 3 LinkedIn\":\n    url(c3.linkedin_url),\n\n  // ----------------------------------------------------------\n  // Why Now — signal 1\n  // ----------------------------------------------------------\n\n\"UI Signal 1 Type\":\n  humanizeEnum(sig1.signal_type),\n\n  \"UI Signal 1 Text\":\n    cleanSignalText(sig1.evidence_excerpt),\n\n\"UI Signal 1 Freshness\":\n  humanizeEnum(sig1.evidence_freshness),\n\n  \"UI Signal 1 URL\":\n    url(sig1.source_url),\n\n  // ----------------------------------------------------------\n  // Why Now — signal 2\n  // ----------------------------------------------------------\n\n\"UI Signal 2 Type\":\n  humanizeEnum(sig2.signal_type),\n\n  \"UI Signal 2 Text\":\n    cleanSignalText(sig2.evidence_excerpt),\n\n\"UI Signal 2 Freshness\":\n  humanizeEnum(sig2.evidence_freshness),\n\n  \"UI Signal 2 URL\":\n    url(sig2.source_url),\n\n  // ----------------------------------------------------------\n  // Why Now — signal 3\n  // ----------------------------------------------------------\n\n \"UI Signal 3 Type\":\n  humanizeEnum(sig3.signal_type),\n\n  \"UI Signal 3 Text\":\n    cleanSignalText(sig3.evidence_excerpt),\n\n\"UI Signal 3 Freshness\":\n  humanizeEnum(sig3.evidence_freshness),\n\n  \"UI Signal 3 URL\":\n    url(sig3.source_url),\n\n  // ----------------------------------------------------------\n  // Potential Sales Angles\n  // ----------------------------------------------------------\n\n  \"UI Hypothesis 1\":\n    extractPotentialRelevance(h1.rendered_text),\n\n  \"UI Hypothesis 2\":\n    extractPotentialRelevance(h2.rendered_text),\n\n  \"UI Hypothesis 3\":\n    extractPotentialRelevance(h3.rendered_text),\n\n  // ----------------------------------------------------------\n  // Ready state\n  // ----------------------------------------------------------\n\n  \"UI Result Ready\":\n    s.sales_intelligence_brief_status === \"generated\"\n};\n\n// ============================================================\n// 7. Preserve canonical state + append UI projection\n// ============================================================\n\nreturn [{\n  json: {\n    ...s,\n    _ui: ui\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2512,
+        -96
+      ],
+      "id": "f4da1d6e-869e-4fb9-8725-68300ae49570",
+      "name": "Prepare UI Result"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "9ntiIavC4LWesnq2",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/9ntiIavC4LWesnq2",
+          "cachedResultName": "Layer 2F - Sales Intelligence - Tavily Batch Extract + Native OpenAI"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2128,
+        -672
+      ],
+      "id": "58e0cba6-da40-4ffe-b64a-f67284ffc31b",
+      "name": "Execute Layer '2F'"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "PARENT - Entry (Execute Workflow Trigger)": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Validate Entry Envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Validate Entry Envelope": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Entry Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Entry Route": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Execute Layer 2A",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PARENT - STOP Failed (Persistence TODO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Execute Layer 2A": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Gate After 2A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Gate After 2A": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Route After 2A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Route After 2A": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Execute Layer 2B",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PARENT - STOP Manual Review (Persistence TODO)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PARENT - STOP Failed (Persistence TODO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Execute Layer 2B": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Gate After 2B",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Gate After 2B": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Route After 2B",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Route After 2B": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Execute Layer 2C",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PARENT - STOP Manual Review (Persistence TODO)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PARENT - STOP Failed (Persistence TODO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Execute Layer 2C": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Gate After 2C",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Gate After 2C": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Route After 2C",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Route After 2C": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Prepare 2E ACCOUNT_ONLY",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PARENT - Execute Layer 2D",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PARENT - STOP Manual Review (Persistence TODO)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PARENT - STOP Failed (Persistence TODO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Execute Layer 2D": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Gate After 2D",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Gate After 2D": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Route After 2D",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Route After 2D": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Prepare 2E VERIFIED_PERSON",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PARENT - STOP Manual Review (Persistence TODO)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PARENT - STOP Failed (Persistence TODO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Prepare 2E ACCOUNT_ONLY": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Execute Layer 2E",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Prepare 2E VERIFIED_PERSON": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Execute Layer 2E",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Execute Layer 2E": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Gate After 2E",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Gate After 2E": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Route After 2E",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Route After 2E": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Core Through 2E Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PARENT - STOP Failed (Persistence TODO)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Core Through 2E Complete": {
+      "main": [
+        [
+          {
+            "node": "Account Fit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Account Fit": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cleanup Metadata": {
+      "main": [
+        [
+          {
+            "node": "Person Fit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Person Fit": {
+      "main": [
+        [
+          {
+            "node": "Data Confidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Confidence": {
+      "main": [
+        [
+          {
+            "node": "Final Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Routing": {
+      "main": [
+        [
+          {
+            "node": "Build SI Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build SI Input": {
+      "main": [
+        [
+          {
+            "node": "Attach SI Runtime Artifacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach SI Runtime Artifacts": {
+      "main": [
+        [
+          {
+            "node": "Compute SI Fingerprint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute SI Fingerprint": {
+      "main": [
+        [
+          {
+            "node": "Execute Layer '2F'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate SI Envelope": {
+      "main": [
+        [
+          {
+            "node": "Prepare UI Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Final Airtable  Projection": {
+      "main": [
+        [
+          {
+            "node": "Prepare Airtable Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Airtable Update": {
+      "main": [
+        [
+          {
+            "node": "Check Airtable Write Allowed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Airtable Write Allowed": {
+      "main": [
+        [
+          {
+            "node": "Airtable Get Current Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Airtable Row": {
+      "main": [
+        [
+          {
+            "node": "Create or update a record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable Get Current Lead": {
+      "main": [
+        [
+          {
+            "node": "Guard Current Airtable Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard Current Airtable Run": {
+      "main": [
+        [
+          {
+            "node": "Prepare Airtable Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Airtable Stale Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Build 2E HR Discovery Request": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Build Apollo HR Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Build Apollo HR Search": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Apollo HR Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PARENT - Apollo HR Search": {
+      "main": [
+        [
+          {
+            "node": "PARENT - Adapt Apollo HR Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Airtable Persistence": {
+      "main": [
+        []
+      ]
+    },
+    "Create or update a record": {
+      "main": [
+        [
+          {
+            "node": "Verify Airtable Persistence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare UI Result": {
+      "main": [
+        [
+          {
+            "node": "Build Final Airtable  Projection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Layer '2F'": {
+      "main": [
+        [
+          {
+            "node": "Validate SI Envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "497e82d5-c95b-48a2-9e81-559d26e71f9b",
+  "meta": {
+    "instanceId": "103be981e8db8e32f88742df1e25a9d1be5dab7bb54ee11dc0f02d3c1876b528"
+  },
+  "nodeGroups": [],
+  "id": "ZdrCHsGNoa919PTU",
+  "tags": []
+}

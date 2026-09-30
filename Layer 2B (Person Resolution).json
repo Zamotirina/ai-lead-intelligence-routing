@@ -1,0 +1,1314 @@
+{
+  "name": "Layer 2B (Person Resolution)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "name": "2B - Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -5216,
+        96
+      ],
+      "id": "d5d00b14-c5a3-4c67-85ab-26526f6e8568"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json || {};\nconst ndom = (d)=>String(d||'').trim().toLowerCase().replace(/\\.$/,'');\nconst problems = [];\nif (s.account_resolution_status !== 'CONFIRMED') problems.push('account_resolution_status');\nif (s.account_resolution_reason !== 'exact_domain_match') problems.push('account_resolution_reason');\nif (s.account_company === null || s.account_company === undefined) problems.push('account_company');\nif (!(s.account_company && s.account_company.provider_refs && s.account_company.provider_refs.apollo_organization_id)) problems.push('apollo_organization_id');\nif (ndom(s.account_company && s.account_company.domain) !== ndom(s.email_domain)) problems.push('domain_mismatch');\nif (!s.email) problems.push('email');\nif (!s.email_domain) problems.push('email_domain');\nif (s.domain_status !== 'BUSINESS') problems.push('domain_status');\nif (s.is_personal_domain !== false) problems.push('is_personal_domain');\nif (s.is_system_inbox !== false) problems.push('is_system_inbox');\nif (s.domain_verification_status !== 'MAIL_DOMAIN_VERIFIED') problems.push('domain_verification_status');\nif (typeof s.is_role_inbox !== 'boolean') problems.push('is_role_inbox_not_boolean');\nif (!['VALID','SUSPICIOUS','INVALID'].includes(s.name_quality)) problems.push('name_quality');\nif (s.manual_review !== false) problems.push('manual_review');\nif (s.manual_review_reason !== null) problems.push('manual_review_reason');\nif (s.enrichment_status !== 'processing') problems.push('enrichment_status');\nif (s.result_status !== 'pending') problems.push('result_status');\nif (s.routing_outcome !== null) problems.push('routing_outcome');\nconst gate_ok = problems.length === 0;\nreturn [{ json: { ...s, gate_ok, gate_problems: problems } }];\n"
+      },
+      "name": "2B - Upstream Contract Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4992,
+        96
+      ],
+      "id": "d70b495f-5d9e-49ae-b347-f95c2c37179a"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.gate_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "id": "f04f97fa-5c75-4117-b1b1-4435ca5a8e07"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "2B - Gate Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -4784,
+        96
+      ],
+      "id": "ba7eeae3-3aed-4c4a-b6f5-e0b9964b0a9e"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json || {};\nconst out = { ...s, person_resolution_status: null, person_resolution_reason: null, person: null, matched_employer_candidate: null,\n  person_resolution_evidence: null, manual_review: false, manual_review_reason: null,\n  enrichment_status: 'failed', result_status: 'failed', routing_outcome: 'FAILED',\n  person_decision: 'FAILED', person_decision_reason: 'internal_contract_error' };\nreturn [{ json: out }];\n"
+      },
+      "name": "2B - Build Contract Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4784,
+        288
+      ],
+      "id": "b484e61e-a688-45cc-a646-6c7d3aa3d85f"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.is_role_inbox }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "id": "633345e0-2675-4f56-8555-6102c5aeb379"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "2B - Role Inbox?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -4560,
+        96
+      ],
+      "id": "656cd0d5-3c83-45f7-abc6-7fe35268bee2"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json || {};\nconst evidence = {\n  provider: null, lookup_email: s.email || null, lookup_mode: 'exact_email', lookup_performed: false,\n  match_basis: null, supplied_identity: null, core_observation: null,\n  hydration: { performed: false, status: 'not_needed', attempts: 0, error_code: null, observation: null },\n  provider_identity_consistency: 'INSUFFICIENT', profile_reference_consistency: 'NONE',\n  employer_candidate_consistency: 'NONE', employer_candidate_field_conflicts: [],\n  name_corroboration: 'UNUSABLE', comparison: 'SKIPPED_ROLE_INBOX'\n};\nconst out = { ...s, person_resolution_status: 'SKIPPED_ROLE_INBOX', person_resolution_reason: 'role_inbox',\n  person: null, matched_employer_candidate: null, person_resolution_evidence: evidence,\n  manual_review: false, manual_review_reason: null, enrichment_status: 'processing', result_status: 'pending', routing_outcome: null,\n  person_decision: 'SKIPPED_ROLE_INBOX' };\nreturn [{ json: out }];\n"
+      },
+      "name": "2B - Build Role Inbox Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4560,
+        288
+      ],
+      "id": "51d33fdc-d0af-4a6b-8466-f7f99e10e968"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json || {};\nconst person_lookup_request = { provider: 'apollo', operation: 'person_by_email', lookup_key: s.email, lookup_mode: 'exact_email' };\nreturn [{ json: { ...s, person_lookup_request, attempt: 1 } }];\n"
+      },
+      "name": "2B - Prepare Person Match",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4336,
+        96
+      ],
+      "id": "7d348a07-010d-4c5f-a105-943033993266"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.apollo.io/api/v1/people/match",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "email",
+              "value": "={{ $json.email }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "2B - Apollo Person Match",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4112,
+        96
+      ],
+      "retryOnFail": false,
+      "id": "896cbe8a-0b62-4e22-9199-1f29c4e42935",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KVT6aZ7oOpZjoj5a",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json || {};\nconst l1 = $('2B - Input').first().json || {};\n\nfunction nullable(v) {\n  return (v === null  || v === undefined || v === '') ? null : v;\n}\n\nlet attempts = Number(raw.attempt || 0);\nif (attempts < 1) attempts = 1;\n\nlet status = null;\nlet person = null;\nlet match_basis = null;\nlet match_confidence = null;\n\nconst hasPersonKey =\n  Object.prototype.hasOwnProperty.call(raw, 'person');\n\nconst rawPerson =\n  hasPersonKey ? raw.person : undefined;\n\nif (raw.error || raw.detail) {\n  status = 'INVALID_RESPONSE';\n\n} else if (hasPersonKey && rawPerson === null) {\n  status = 'NO_MATCH';\n\n} else if (\n  hasPersonKey &&\n  rawPerson !== null &&\n  typeof rawPerson === 'object' &&\n  !Array.isArray(rawPerson)\n) {\n  match_confidence =\n    rawPerson.match_confidence == null\n      ? null\n      : String(rawPerson.match_confidence)\n          .trim()\n          .toLowerCase();\n\n  // Apollo may return a person-shaped object and ID\n  // even when no actual person was matched.\n  if (match_confidence === 'none') {\n    status = 'NO_MATCH';\n    person = null;\n    match_basis = null;\n\n  } else {\n    const pid = nullable(rawPerson.id);\n\n    const org =\n      rawPerson.organization &&\n      typeof rawPerson.organization === 'object' &&\n      !Array.isArray(rawPerson.organization)\n        ? rawPerson.organization\n        : {};\n\n    person = {\n      provider_person_id: pid,\n      name: nullable(rawPerson.name),\n      linkedin_url: nullable(rawPerson.linkedin_url),\n      title: nullable(rawPerson.title),\n\n      organization: {\n        provider_organization_id: nullable(org.id),\n        name: nullable(org.name),\n        domain: nullable(org.primary_domain),\n        linkedin_url: nullable(org.linkedin_url)\n      }\n    };\n\n    if (!pid) {\n      status = 'INVALID_RESPONSE';\n      person = null;\n\n    } else {\n      status = 'MATCH';\n      match_basis = 'EXACT_EMAIL';\n    }\n  }\n\n} else {\n  status = 'INVALID_RESPONSE';\n}\n\nconst org =\n  (person && person.organization) || {};\n\nconst hasName =\n  !!(person && person.name);\n\nconst hasLinkedIn =\n  !!(person && person.linkedin_url);\n\nconst hasTitle =\n  !!(person && person.title);\n\nconst hasEmployer =\n  !!(\n    org.provider_organization_id ||\n    org.name ||\n    org.domain ||\n    org.linkedin_url\n  );\n\nconst hydration_needed =\n  status === 'MATCH' &&\n  (\n    !hasName ||\n    !hasLinkedIn ||\n    !hasTitle ||\n    !hasEmployer\n  );\n\nconst provider_result = {\n  provider: 'apollo',\n  operation: 'person_by_email',\n  status,\n  match_basis,\n  person,\n\n  diagnostics: {\n    http_status: 200,\n    attempts,\n    error_code: null,\n    match_confidence\n  }\n};\n\nreturn [{\n  json: {\n    ...l1,\n\n    person_lookup_request: {\n      provider: 'apollo',\n      operation: 'person_by_email',\n      lookup_key: l1.email,\n      lookup_mode: 'exact_email'\n    },\n\n    provider_result,\n    hydration_needed\n  }\n}];"
+      },
+      "name": "2B - Core Adapter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3904,
+        96
+      ],
+      "id": "214f6f16-6ea3-427b-bfb2-4ef5b6fe1f04"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json || {};\nconst l1 = $('2B - Input').first().json || {};\n\n// Current attempt.\n// First provider call is attempt 1.\nlet attempts = Number(\n  item.attempt ||\n  l1.attempt ||\n  0\n);\n\nif (attempts < 1) {\n  attempts = 1;\n}\n\n// --------------------------------------------------\n// 1. Extract HTTP status code\n// --------------------------------------------------\n\nlet statusCode = Number(\n  item.statusCode ||\n  item.status ||\n  item?.error?.statusCode ||\n  item?.error?.status ||\n  0\n);\n\n// n8n HTTP Request errors may contain the real status\n// only inside error.message, for example:\n// \"403 - Request failed with status code 403\"\nconst nestedMessage =\n  item?.error?.message ||\n  item?.message ||\n  '';\n\nif (!statusCode) {\n  const statusMatch = String(nestedMessage).match(\n    /(?:^|\\s)(4\\d\\d|5\\d\\d)(?:\\s|-|$)/\n  );\n\n  if (statusMatch) {\n    statusCode = Number(statusMatch[1]);\n  }\n}\n\nconst hasStatus =\n  Number.isInteger(statusCode) &&\n  statusCode >= 100 &&\n  statusCode <= 599;\n\n// --------------------------------------------------\n// 2. Classify transient vs permanent error\n// --------------------------------------------------\n\nlet transient = false;\n\nif (hasStatus) {\n  transient =\n    statusCode === 408 ||\n    statusCode === 429 ||\n    (\n      statusCode >= 500 &&\n      statusCode <= 599\n    );\n} else {\n  // No reliable HTTP status.\n  // Fall back only to recognizable transport/network errors.\n  const errorText = String(\n    item?.error?.message ||\n    item?.message ||\n    item?.error ||\n    JSON.stringify(item) ||\n    ''\n  ).toLowerCase();\n\n  transient =\n    /timeout|timed out|etimedout|econnreset|econnrefused|econnaborted|network|socket|aborted|unreachable/i\n      .test(errorText);\n}\n\n// --------------------------------------------------\n// 3. Retry policy\n// --------------------------------------------------\n\n// 3 attempts total:\n// attempt 1 = initial request\n// attempt 2 = retry after ~2 sec\n// attempt 3 = retry after ~5 sec\nconst exhausted = attempts >= 3;\n\nconst shouldRetry =\n  transient &&\n  !exhausted;\n\nconst delayMs =\n  attempts === 1\n    ? 2000\n    : 5000;\n\nconst request_status =\n  transient\n    ? 'TRANSIENT_ERROR'\n    : 'PERMANENT_ERROR';\n\nconst next_attempt = attempts + 1;\n\n// attempt is intentionally advanced because\n// the retry branch feeds this item back into Apollo.\nreturn [\n  {\n    json: {\n      ...l1,\n\n      shouldRetry,\n      attempts,\n      next_attempt,\n      attempt: next_attempt,\n\n      delayMs,\n      request_status,\n      statusCode,\n\n      core_error: true,\n      email: l1.email\n    }\n  }\n];"
+      },
+      "name": "2B - Core Retry Classifier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4112,
+        336
+      ],
+      "id": "e2c1ca47-cad8-489d-85e1-f2c1dd690681"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.shouldRetry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "id": "52c2f7c4-343b-49f9-a1bc-c6957169c7f3"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "2B - Core Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -3904,
+        464
+      ],
+      "id": "9fe19170-ec3c-49bd-8903-d23dfaa7db9f"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delayMs / 1000 }}"
+      },
+      "name": "2B - Core Retry Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -3680,
+        336
+      ],
+      "id": "5147354a-aa5d-448c-ade2-a6dd534dc329",
+      "webhookId": "3144c258-cb9e-4098-bd61-39964ca54715"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst it = $input.first().json || {};\nconst l1 = $('2B - Input').first().json || {};\nconst status = it.request_status || 'PERMANENT_ERROR';\nconst provider_result = { provider:'apollo', operation:'person_by_email', status, match_basis:null, person:null, diagnostics:{ http_status: it.statusCode||(status==='TRANSIENT_ERROR'?503:400), attempts: it.attempts||1, error_code: status==='TRANSIENT_ERROR'?'PROVIDER_UNAVAILABLE':'PROVIDER_ERROR' } };\nconst out = { ...l1, provider_result, person_resolution_status:null, person_resolution_reason:null, person:null, matched_employer_candidate:null, person_resolution_evidence:null, manual_review:false, manual_review_reason:null, enrichment_status:'failed', result_status:'failed', routing_outcome:'FAILED', person_decision:'FAILED', person_decision_reason: status==='TRANSIENT_ERROR'?'core_transient_exhausted':'core_permanent_error' };\nreturn [{ json: out }];\n"
+      },
+      "name": "2B - Core Error Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3904,
+        224
+      ],
+      "id": "d5047d6c-b08f-4be3-a02f-c872ce9ac22f"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "c3d03f34-df87-474c-ae87-e75e79bc5fa3",
+                    "leftValue": "={{$json.provider_result.status}}",
+                    "rightValue": "MATCH",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "6db7ce40-2197-4eb7-9a2b-ba8d043ddb03",
+                    "leftValue": "={{$json.provider_result.status}}",
+                    "rightValue": "NO_MATCH",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "name": "2B - Core Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -3680,
+        96
+      ],
+      "id": "11713996-b6eb-4669-a01c-03917734bcbc"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.hydration_needed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "id": "7536ab53-e912-491e-b63f-6185b47d750f"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "2B - Hydration Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -3456,
+        96
+      ],
+      "id": "ff711f79-d929-4e7e-a371-f82403568575"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json || {};\nconst pid = (s.provider_result && s.provider_result.person && s.provider_result.person.provider_person_id) || '';\nreturn [{ json: { ...s, hydration_request: { provider:'apollo', operation:'person_by_id', requested_person_id: pid }, hydration_person_id: pid, attempt: 1 } }];\n"
+      },
+      "name": "2B - Prepare Hydration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3232,
+        96
+      ],
+      "id": "cae07c70-ff45-4495-ac14-716d92d96981"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.apollo.io/api/v1/people/match",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "={{ $json.hydration_person_id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "2B - Apollo Person Hydration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3024,
+        96
+      ],
+      "retryOnFail": false,
+      "id": "6b2e8f65-d5b5-44d0-bfd4-edbb9aae5dc9",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KVT6aZ7oOpZjoj5a",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Hydrates the already-resolved Apollo person using the People Enrichment endpoint POST /people/match with Apollo person id. Uses the same people_match-capable credential path as exact-email enrichment; avoids requiring separate person_read / people/show access."
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction casefold(s){ return String(s).toLowerCase().replace(/\\u00df/g,'ss').replace(/\\u03c2/g,'\\u03c3'); }\nfunction ndom(d){ return String(d||'').trim().toLowerCase().replace(/\\.$/,''); }\nfunction nname(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKD'); x=x.replace(/\\p{M}/gu,''); x=casefold(x); x=x.replace(/['\\u2019\\u02bc\\u2018]/gu,''); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nurl(u){ if(u==null||u==='') return ''; return String(u).trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/^www\\./,'').replace(/[?#].*$/,'').replace(/\\/+$/,''); }\nfunction ncompany(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKC'); x=casefold(x); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nameCompare(a,b){\n  const na=nname(a), nb=nname(b);\n  if(!na||!nb) return 'UNUSABLE';\n  if(na===nb) return 'CONSISTENT';\n  const ta=na.split(' '), tb=nb.split(' ');\n  if(ta.length===tb.length && ta.length>1 && JSON.stringify([...ta].sort())===JSON.stringify([...tb].sort())) return 'UNUSABLE';\n  if(ta.length>=2 && tb.length>=2 && ta[0]===tb[0] && ta[ta.length-1]===tb[tb.length-1]){\n    const ma=ta.slice(1,-1), mb=tb.slice(1,-1);\n    if(ma.length===0 || mb.length===0) return 'CONSISTENT';\n    if(ma.length!==mb.length) return 'UNUSABLE';\n    for(let i=0;i<ma.length;i++){\n      const a=ma[i], b=mb[i];\n      if(a===b) continue;\n      if(a.length===1 && b.startsWith(a)) continue;\n      if(b.length===1 && a.startsWith(b)) continue;\n      return 'UNUSABLE';\n    }\n    return 'CONSISTENT';\n  }\n  if(ta.length>=2 && tb.length>=2 && ta[0]!==tb[0] && ta[ta.length-1]!==tb[tb.length-1]) return 'CONFLICT';\n  return 'UNUSABLE';\n}\n\nconst raw = $input.first().json || {};\nconst pre = $('2B - Prepare Hydration').first().json || {};\nlet attempts = Number($input.first().json.attempt || 0); if(attempts < 1) attempts = 1;\nfunction nn(v){ return (v===null||v===undefined||v==='')?null:v; }\nlet status; let person=null;\nconst hasPersonKey = raw && Object.prototype.hasOwnProperty.call(raw, 'person');\nconst rawPerson = raw ? raw.person : undefined;\nconst requested = pre.hydration_person_id || '';\nif (raw && (raw.error||raw.detail)) { status='INVALID_RESPONSE'; }\nelse if (hasPersonKey && rawPerson !== null && typeof rawPerson === 'object' && !Array.isArray(rawPerson)) {\n  const p=rawPerson; const pid=nn(p.id); const org=(p.organization&&typeof p.organization==='object'&&!Array.isArray(p.organization))?p.organization:{};\n  person={ provider_person_id:pid, name:nn(p.name), linkedin_url:nn(p.linkedin_url), title:nn(p.title), organization:{ provider_organization_id:nn(org.id), name:nn(org.name), domain:nn(org.primary_domain), linkedin_url:nn(org.linkedin_url) } };\n  if (pid && pid !== requested) { status='INVALID_RESPONSE'; person=null; }\n  else { status='MATCH'; }\n} else if (hasPersonKey && rawPerson === null) { status='NO_MATCH'; }\nelse { status='INVALID_RESPONSE'; }\nconst hydration_result = { provider:'apollo', operation:'person_by_id', status, requested_person_id: requested, person, diagnostics:{ http_status:200, attempts, error_code:null } };\nreturn [{ json: { ...pre, hydration_result } }];\n"
+      },
+      "name": "2B - Hydration Adapter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2800,
+        96
+      ],
+      "id": "71272a37-bd11-433c-9af9-2d4bee85e18c"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst item = $input.first().json || {};\nconst pre = $('2B - Prepare Hydration').first().json || {};\nlet attempts = Number(item.attempt || pre.attempt || 0); if(attempts < 1) attempts = 1;\nconst statusCode = Number(item.statusCode || item.status || 0);\nconst hasStatus = Number.isInteger(statusCode) && statusCode>=100 && statusCode<=599;\nlet transient=false;\nif (hasStatus) { transient = (statusCode===429 || statusCode===408 || (statusCode>=500&&statusCode<=599)); }\nelse { const m=String(item.error||item.message||JSON.stringify(item)||'').toLowerCase(); transient=/timeout|timed out|etimedout|econnreset|econnrefused|econnaborted|network|socket|aborted|unreachable/i.test(m); }\nconst exhausted = attempts >= 3;\nconst shouldRetry = transient && !exhausted;\nconst delayMs = attempts===1?2000:5000;\nconst request_status = transient ? 'TRANSIENT_ERROR':'PERMANENT_ERROR';\nconst next_attempt = attempts + 1;\nconst hid = pre.hydration_person_id || '';\nreturn [{ json: { ...pre, shouldRetry, attempts, next_attempt, attempt: next_attempt, delayMs, request_status, statusCode, hydration_person_id: hid } }];\n"
+      },
+      "name": "2B - Hydration Retry Classifier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3024,
+        336
+      ],
+      "id": "a2a458f1-eb7a-427a-8590-f2c0a969af1a"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.shouldRetry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "2B - Hydration Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -2800,
+        336
+      ],
+      "id": "d9e0b013-cf6d-4530-a9a2-9bb5c2a79a30"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delayMs / 1000 }}"
+      },
+      "name": "2B - Hydration Retry Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -2576,
+        336
+      ],
+      "id": "8ee5c238-0cf7-4233-b95c-c44006575e04",
+      "webhookId": "5a36fa87-bb8e-43eb-bd2f-1404de7fcf03"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst it = $input.first().json || {};\nconst pre = $('2B - Prepare Hydration').first().json || {};\nconst status = it.request_status || 'PERMANENT_ERROR';\nconst hydration_result = { provider:'apollo', operation:'person_by_id', status, requested_person_id:(it.hydration_person_id||''), person:null, diagnostics:{ http_status: it.statusCode||(status==='TRANSIENT_ERROR'?503:400), attempts: it.attempts||1, error_code: status==='TRANSIENT_ERROR'?'PROVIDER_UNAVAILABLE':'PROVIDER_ERROR' } };\nreturn [{ json: { ...pre, hydration_result } }];\n"
+      },
+      "name": "2B - Hydration Failure Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2800,
+        224
+      ],
+      "id": "92311015-4e10-4d4a-9b80-0ce98815d154"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction casefold(s){ return String(s).toLowerCase().replace(/\\u00df/g,'ss').replace(/\\u03c2/g,'\\u03c3'); }\nfunction ndom(d){ return String(d||'').trim().toLowerCase().replace(/\\.$/,''); }\nfunction nname(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKD'); x=x.replace(/\\p{M}/gu,''); x=casefold(x); x=x.replace(/['\\u2019\\u02bc\\u2018]/gu,''); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nurl(u){ if(u==null||u==='') return ''; return String(u).trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/^www\\./,'').replace(/[?#].*$/,'').replace(/\\/+$/,''); }\nfunction ncompany(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKC'); x=casefold(x); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nameCompare(a,b){\n  const na=nname(a), nb=nname(b);\n  if(!na||!nb) return 'UNUSABLE';\n  if(na===nb) return 'CONSISTENT';\n  const ta=na.split(' '), tb=nb.split(' ');\n  if(ta.length===tb.length && ta.length>1 && JSON.stringify([...ta].sort())===JSON.stringify([...tb].sort())) return 'UNUSABLE';\n  if(ta.length>=2 && tb.length>=2 && ta[0]===tb[0] && ta[ta.length-1]===tb[tb.length-1]){\n    const ma=ta.slice(1,-1), mb=tb.slice(1,-1);\n    if(ma.length===0 || mb.length===0) return 'CONSISTENT';\n    if(ma.length!==mb.length) return 'UNUSABLE';\n    for(let i=0;i<ma.length;i++){\n      const a=ma[i], b=mb[i];\n      if(a===b) continue;\n      if(a.length===1 && b.startsWith(a)) continue;\n      if(b.length===1 && a.startsWith(b)) continue;\n      return 'UNUSABLE';\n    }\n    return 'CONSISTENT';\n  }\n  if(ta.length>=2 && tb.length>=2 && ta[0]!==tb[0] && ta[ta.length-1]!==tb[tb.length-1]) return 'CONFLICT';\n  return 'UNUSABLE';\n}\n\nconst s = $input.first().json || {};\nconst core = s.provider_result || {};\nconst hyd = s.hydration_result || null;\nconst corePerson = (core.status === 'MATCH') ? core.person : null;\nconst hydObs = (hyd && hyd.status === 'MATCH' && hyd.person) ? hyd.person : null;\nconst hydStatus = hyd ? hyd.status : 'NOT_NEEDED';\n\nlet provider_identity_consistency;\nif (!corePerson) provider_identity_consistency = 'INSUFFICIENT';\nelse if (!hydObs) provider_identity_consistency = 'INSUFFICIENT';\nelse {\n  const a = corePerson.name, b = hydObs.name;\n  provider_identity_consistency = (a && b && nameCompare(a,b)==='CONFLICT') ? 'CONFLICT' : 'CONSISTENT';\n}\n\nlet profile_reference_consistency;\nconst cu = corePerson && corePerson.linkedin_url, hu = hydObs && hydObs.linkedin_url;\nif (!cu && !hu) profile_reference_consistency='NONE';\nelse if (cu && !hu) profile_reference_consistency='SINGLE_SOURCE';\nelse if (!cu && hu) profile_reference_consistency='SINGLE_SOURCE';\nelse profile_reference_consistency = (nurl(cu)===nurl(hu)) ? 'CONSISTENT' : 'CONFLICT';\nlet linkedin_url;\nif (cu && hu) linkedin_url = (nurl(cu)===nurl(hu)) ? (hu||cu) : null;\nelse linkedin_url = hu || cu || null;\nlet resolved_name;\nif (provider_identity_consistency === 'CONFLICT') resolved_name = null;\nelse resolved_name = (hydObs && hydObs.name) || (corePerson && corePerson.name) || null;\nconst provider_reported_title = (hydObs && hydObs.title) || (corePerson && corePerson.title) || null;\n\nfunction orgObs(o){ return (o && o.organization) ? o.organization : null; }\nfunction hasEmp(o){ const g=orgObs(o); return !!(g && (g.provider_organization_id || g.name || g.domain || g.linkedin_url)); }\nfunction buildCandidate(org, ops){\n  return { name: org.name || null, domain: (org.domain ? ndom(org.domain) : null), linkedin_url: org.linkedin_url || null,\n    provider_refs: { apollo_organization_id: (org.provider_organization_id ? String(org.provider_organization_id).trim() : null) },\n    source: 'apollo', source_operations: ops };\n}\nconst co = orgObs(corePerson), ho = orgObs(hydObs);\nconst hasC = !!corePerson && hasEmp(corePerson);\nconst hasH = !!hydObs && hasEmp(hydObs);\nlet employer_candidate_consistency;\nconst employer_candidate_field_conflicts = [];\nlet matched_employer_candidate = null;\n\nif (!hasC && !hasH) employer_candidate_consistency='NONE';\nelse if (hasC && !hasH) { employer_candidate_consistency='SINGLE_SOURCE'; matched_employer_candidate=buildCandidate(co,['person_by_email']); }\nelse if (!hasC && hasH) { employer_candidate_consistency='SINGLE_SOURCE'; matched_employer_candidate=buildCandidate(ho,['person_by_id']); }\nelse {\n  // both observations carry employer data\n  const cid=(co.provider_organization_id?String(co.provider_organization_id).trim():null)||null;\n  const hid=(ho.provider_organization_id?String(ho.provider_organization_id).trim():null)||null;\n  const cd=co.domain?ndom(co.domain):null, hd=ho.domain?ndom(ho.domain):null;\n  if (cid && hid) {\n    if (cid!==hid) { employer_candidate_consistency='CONFLICT'; matched_employer_candidate=null; }\n    else { /* same org id: bound */ employer_candidate_consistency='CONSISTENT'; }\n  } else if (cd && hd) {\n    if (cd!==hd) { employer_candidate_consistency='CONFLICT'; matched_employer_candidate=null; }\n    else { employer_candidate_consistency='CONSISTENT'; }\n  } else {\n    // cannot bind by org id or exact domain\n    employer_candidate_consistency='UNBOUND'; matched_employer_candidate=null;\n  }\n  if (employer_candidate_consistency === 'CONSISTENT') {\n    /* supporting-field merge under frozen rules */\n    const m={name:null,domain:null,linkedin_url:null,provider_refs:{apollo_organization_id:cid||hid},source:'apollo',source_operations:['person_by_email','person_by_id']};\n    if (cid&&hid && cid===hid) { m.provider_refs.apollo_organization_id=cid; }\n    if (cd&&hd) {\n      if (cd===hd) m.domain=cd; else { m.domain=null; employer_candidate_field_conflicts.push('domain'); }\n    } else m.domain=cd||hd;\n    if (co.name&&ho.name) {\n      if (ncompany(co.name)===ncompany(ho.name)) m.name=ho.name||co.name; else { m.name=null; employer_candidate_field_conflicts.push('name'); }\n    } else m.name=ho.name||co.name||null;\n    if (co.linkedin_url&&ho.linkedin_url) {\n      if (nurl(co.linkedin_url)===nurl(ho.linkedin_url)) m.linkedin_url=ho.linkedin_url||co.linkedin_url; else { m.linkedin_url=null; employer_candidate_field_conflicts.push('linkedin_url'); }\n    } else m.linkedin_url=ho.linkedin_url||co.linkedin_url||null;\n    matched_employer_candidate=m;\n  }\n}\nconst stable_person_id=(corePerson && corePerson.provider_person_id)||null;\nreturn [{ json: { ...s, provider_identity_consistency, profile_reference_consistency, employer_candidate_consistency, employer_candidate_field_conflicts, resolved_name, person_linkedin_url:linkedin_url, provider_reported_title, matched_employer_candidate, stable_person_id } }];\n"
+      },
+      "name": "2B - Merge Provider Observations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2304,
+        160
+      ],
+      "id": "b0bbee39-a263-4237-97b1-bede78ba3b9d"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.provider_result?.status === 'MATCH' && !$json.person_linkedin_url }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "id": "9e547154-a370-48a4-aa7d-a483bceb7746"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "2B - Profile Anchor Missing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -2080,
+        160
+      ],
+      "id": "ac2ef034-8cbe-42d7-b11e-097d176b5116",
+      "notes": "Runs the public-web fallback only when Apollo matched the person but neither exact-email match nor hydration produced a LinkedIn profile URL."
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nconst name =\n  s.resolved_name ||\n  s.supplied_name ||\n  '';\n\nconst company =\n  s.account_company?.name ||\n  s.matched_employer_candidate?.name ||\n  '';\n\nconst domain =\n  s.account_company?.domain ||\n  s.email_domain ||\n  '';\n\nconst title =\n  s.provider_reported_title ||\n  '';\n\n// Broader query works better with localized LinkedIn mirrors/subdomains.\n// Safety is enforced in the resolver, not by trusting search rank.\nconst query = `${name} ${company} LinkedIn`.trim();\n\nreturn [{\n  json: {\n    ...s,\n\n    _2b_anchor_search: {\n      query,\n      expected_name: name,\n      expected_company: company,\n      expected_domain: domain,\n      expected_title: title\n    },\n\n    _2b_tavily_request: {\n      query,\n      search_depth: \"basic\",\n      chunks_per_source: 1,\n      max_results: 5,\n      topic: \"general\",\n      include_published_date: false,\n      filter_by_published_date: false,\n      include_answer: false,\n      include_raw_content: false,\n      include_images: false,\n      include_image_descriptions: false,\n      include_favicon: false,\n      language: \"en\",\n      filter_by_language: false,\n      auto_parameters: false,\n      exact_match: false,\n      include_usage: true,\n      safe_search: false\n    }\n  }\n}];"
+      },
+      "name": "2B - Build Missing Anchor Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1856,
+        320
+      ],
+      "id": "fc9cf97e-0ffd-475a-b26c-6596c8611434",
+      "notes": "Builds a narrow Tavily query for a LinkedIn /in/ profile using the already-resolved exact-email identity and confirmed account company."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.tavily.com/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json._2b_tavily_request) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "name": "2B - Tavily Missing Anchor Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1632,
+        320
+      ],
+      "id": "505d5b7b-4c63-470b-8ede-b77d0ba7a556",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "DxR3iiafavpU0rxF",
+          "name": "Tavily"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "One bounded search call. Failure is non-fatal: unresolved/ambiguous anchors continue with linkedin_url=null and Layer 2C will send the case to manual review."
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json || {};\nconst s = $('2B - Build Missing Anchor Search').first().json || {};\n\n// Tavily HTTP node returns { body, headers, statusCode, ... }\nconst body =\n  response.body && typeof response.body === 'object'\n    ? response.body\n    : response;\n\nconst results = Array.isArray(body.results)\n  ? body.results\n  : [];\n\nfunction normalizeText(v) {\n  return String(v || '')\n    .toLowerCase()\n    .normalize('NFKD')\n    .replace(/\\p{M}/gu, '')\n    .replace(/[^\\p{L}\\p{N}\\s]/gu, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\n// IMPORTANT:\n// no new URL() here.\n// Accepts:\n// linkedin.com/in/name\n// www.linkedin.com/in/name/\n// pt.linkedin.com/in/name\n// pt.linkedin.com/in/name/en\n// de.linkedin.com/in/name/de\nfunction normalizeLinkedInProfile(rawUrl) {\n  if (!rawUrl) return null;\n\n  let url = String(rawUrl).trim();\n\n  // Remove query/hash\n  url = url.split('#')[0].split('?')[0];\n\n  // Add scheme only for easier regex consistency\n  if (!/^https?:\\/\\//i.test(url)) {\n    url = 'https://' + url;\n  }\n\n  const match = url.match(\n    /^https?:\\/\\/(?:[a-z]{2,3}\\.)?(?:www\\.)?linkedin\\.com\\/in\\/([^\\/?#]+)(?:\\/(?:[a-z]{2}(?:-[a-z]{2})?))?\\/?$/i\n  );\n\n  if (!match || !match[1]) {\n    return null;\n  }\n\n  const slug = match[1].trim();\n\n  if (!slug) {\n    return null;\n  }\n\n  return `https://www.linkedin.com/in/${slug}/`;\n}\n\nconst expectedName =\n  normalizeText(\n    s.profile_anchor_search?.expected_name ||\n    s.resolved_name ||\n    s.supplied_name ||\n    ''\n  );\n\nconst expectedCompany =\n  normalizeText(\n    s.profile_anchor_search?.expected_company ||\n    s.account_company?.name ||\n    s.matched_employer_candidate?.name ||\n    ''\n  );\n\nconst expectedTitle =\n  normalizeText(\n    s.profile_anchor_search?.expected_title ||\n    s.provider_reported_title ||\n    ''\n  );\n\nconst nameTokens =\n  expectedName\n    .split(' ')\n    .filter(Boolean);\n\nconst titleTokens =\n  expectedTitle\n    .split(' ')\n    .filter(token => token.length >= 4);\n\nconst candidates = [];\nconst rejected = [];\n\nfor (const result of results) {\n  const rawUrl = result?.url || null;\n  const linkedinUrl =\n    normalizeLinkedInProfile(rawUrl);\n\n  if (!linkedinUrl) {\n    rejected.push({\n      url: rawUrl,\n      reason: 'NOT_LINKEDIN_PROFILE_URL'\n    });\n    continue;\n  }\n\n  const titleText =\n    normalizeText(result?.title || '');\n\n  const contentText =\n    normalizeText(result?.content || '');\n\n  const evidenceText =\n    `${titleText} ${contentText}.trim()`;\n\n  const nameMatch =\n    nameTokens.length >= 2 &&\n    nameTokens.every(token =>\n      evidenceText.includes(token)\n    );\n\n  const companyMatch =\n    !!expectedCompany &&\n    evidenceText.includes(expectedCompany);\n\n  const titleMatch =\n    titleTokens.length > 0 &&\n    titleTokens.some(token =>\n      evidenceText.includes(token)\n    );\n\n  if (!nameMatch) {\n    rejected.push({\n      url: rawUrl,\n      normalized_url: linkedinUrl,\n      reason: 'NAME_MISMATCH'\n    });\n    continue;\n  }\n\n  // Require company OR title corroboration.\n  if (!companyMatch && !titleMatch) {\n    rejected.push({\n      url: rawUrl,\n      normalized_url: linkedinUrl,\n      reason: 'NO_EMPLOYER_OR_TITLE_CORROBORATION'\n    });\n    continue;\n  }\n\n  candidates.push({\n    linkedin_url: linkedinUrl,\n    source_url: rawUrl,\n    name_match: nameMatch,\n    company_match: companyMatch,\n    title_match: titleMatch,\n    search_title: result?.title || null,\n    search_snippet: result?.content || null,\n    score:\n      typeof result?.score === 'number'\n        ? result.score\n        : null\n  });\n}\n\n// Deduplicate by canonical LinkedIn profile URL.\nconst uniqueCandidates = [\n  ...new Map(\n    candidates.map(candidate => [\n      candidate.linkedin_url,\n      candidate\n    ])\n  ).values()\n];\n\n// Prefer candidates corroborated by company.\nconst companyCandidates =\n  uniqueCandidates.filter(\n    candidate => candidate.company_match\n  );\n\nlet finalCandidates =\n  companyCandidates.length > 0\n    ? companyCandidates\n    : uniqueCandidates;\n\nif (finalCandidates.length === 1) {\n  const candidate = finalCandidates[0];\n  return [{\n    json: {\n      ...s,\n\n      person_linkedin_url:\n        candidate.linkedin_url,\n\n      profile_reference_consistency:\n        s.profile_reference_consistency === 'NONE'\n          ? 'SINGLE_SOURCE'\n          : s.profile_reference_consistency,\n\n      profile_anchor_fallback: {\n        status: 'RESOLVED',\n        source: 'TAVILY_SEARCH',\n\n        query:\n          s.profile_anchor_search?.query ||\n          body.query ||\n          null,\n\n        candidate_count: 1,\n\n        linkedin_url:\n          candidate.linkedin_url,\n\n        source_url:\n          candidate.source_url,\n\n        name_match:\n          candidate.name_match,\n\n        company_match:\n          candidate.company_match,\n\n        title_match:\n          candidate.title_match,\n\n        score:\n          candidate.score\n      }\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ...s,\n\n    profile_anchor_fallback: {\n      status:\n        finalCandidates.length > 1\n          ? 'AMBIGUOUS'\n          : 'NOT_FOUND',\n\n      source: 'TAVILY_SEARCH',\n\n      query:\n        s.profile_anchor_search?.query ||\n        body.query ||\n        null,\n\n      candidate_count:\n        finalCandidates.length,\n\n      candidates:\n        finalCandidates,\n\n      rejected_results:\n        rejected,\n\n      raw_result_count:\n        results.length\n    }\n  }\n}];"
+      },
+      "name": "2B - Resolve Missing Anchor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1408,
+        320
+      ],
+      "id": "39485d0e-c09b-471b-9d3c-b03282992f88",
+      "notes": "Accepts exactly one unique linkedin.com/in candidate only when both resolved-name evidence and confirmed-company evidence corroborate it. Otherwise leaves the anchor missing."
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction casefold(s){ return String(s).toLowerCase().replace(/\\u00df/g,'ss').replace(/\\u03c2/g,'\\u03c3'); }\nfunction ndom(d){ return String(d||'').trim().toLowerCase().replace(/\\.$/,''); }\nfunction nname(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKD'); x=x.replace(/\\p{M}/gu,''); x=casefold(x); x=x.replace(/['\\u2019\\u02bc\\u2018]/gu,''); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nurl(u){ if(u==null||u==='') return ''; return String(u).trim().toLowerCase().replace(/^https?:\\/\\//,'').replace(/^www\\./,'').replace(/[?#].*$/,'').replace(/\\/+$/,''); }\nfunction ncompany(s){ if(s==null||s==='') return ''; let x=String(s).normalize('NFKC'); x=casefold(x); x=x.replace(/\\p{P}/gu,' '); x=x.replace(/[^\\p{L}\\p{N}\\s]/gu,' '); x=x.replace(/\\s+/gu,' '); return x.trim(); }\nfunction nameCompare(a,b){\n  const na=nname(a), nb=nname(b);\n  if(!na||!nb) return 'UNUSABLE';\n  if(na===nb) return 'CONSISTENT';\n  const ta=na.split(' '), tb=nb.split(' ');\n  if(ta.length===tb.length && ta.length>1 && JSON.stringify([...ta].sort())===JSON.stringify([...tb].sort())) return 'UNUSABLE';\n  if(ta.length>=2 && tb.length>=2 && ta[0]===tb[0] && ta[ta.length-1]===tb[tb.length-1]){\n    const ma=ta.slice(1,-1), mb=tb.slice(1,-1);\n    if(ma.length===0 || mb.length===0) return 'CONSISTENT';\n    if(ma.length!==mb.length) return 'UNUSABLE';\n    for(let i=0;i<ma.length;i++){\n      const a=ma[i], b=mb[i];\n      if(a===b) continue;\n      if(a.length===1 && b.startsWith(a)) continue;\n      if(b.length===1 && a.startsWith(b)) continue;\n      return 'UNUSABLE';\n    }\n    return 'CONSISTENT';\n  }\n  if(ta.length>=2 && tb.length>=2 && ta[0]!==tb[0] && ta[ta.length-1]!==tb[tb.length-1]) return 'CONFLICT';\n  return 'UNUSABLE';\n}\n\nconst s=$input.first().json||{};\nconst quality=s.name_quality, supplied=s.supplied_name, providerName=s.resolved_name;\nlet name_corroboration;\nif(quality==='INVALID') name_corroboration='UNUSABLE';\nelse if(quality==='SUSPICIOUS'){ const ns=nname(supplied),np=nname(providerName||''); name_corroboration=(ns&&np&&ns===np)?'CONSISTENT':'UNUSABLE'; }\nelse if(quality==='VALID') name_corroboration=nameCompare(supplied,providerName||'');\nelse name_corroboration='UNUSABLE';\nreturn [{ json:{...s,name_corroboration} }];\n"
+      },
+      "name": "2B - Name Corroboration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        96
+      ],
+      "id": "c457d8af-e846-44a1-8f68-4a4152f84015"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{};\nconst status=(s.provider_result||{}).status;\nlet person_decision, person_decision_reason;\nif(status==='MATCH'){ if(s.provider_identity_consistency==='CONFLICT'){person_decision='AMBIGUOUS';person_decision_reason='provider_identity_conflict';} else if(s.name_corroboration==='CONFLICT'){person_decision='AMBIGUOUS';person_decision_reason='supplied_name_conflict';} else {person_decision='CONFIRMED';person_decision_reason='exact_email_match';} }\nelse if(status==='NO_MATCH'){person_decision='NOT_FOUND';person_decision_reason='provider_not_found';}\nelse {person_decision='FAILED';person_decision_reason=(status==='TRANSIENT_ERROR'?'core_transient_exhausted':'core_provider_invalid');}\nreturn [{json:{...s,person_decision,person_decision_reason}}];\n"
+      },
+      "name": "2B - Final Person Resolution Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        96
+      ],
+      "id": "de8b900d-3879-45c4-b6c3-d811917b27e1"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{};\nif (s.person_decision === 'SKIPPED_ROLE_INBOX') { return [{ json: { ...s, dispatch:'NONTERMINAL' } }]; }\nconst core=s.provider_result||{};\nconst corePerson=(core.status==='MATCH')?core.person:null;\nconst hyd=s.hydration_result||null;\nconst hydObs=(hyd&&hyd.status==='MATCH'&&hyd.person)?hyd.person:null;\nlet person=null,person_resolution_status,person_resolution_reason,manual_review,manual_review_reason,enrichment_status,result_status,routing_outcome,dispatch,matched_employer_candidate;\nif(s.person_decision==='CONFIRMED'){\n  person={resolved_name:s.resolved_name,linkedin_url:s.person_linkedin_url,provider_reported_title:s.provider_reported_title,current_title:null,provider_refs:{apollo_person_id:s.stable_person_id}};\n  person_resolution_status='CONFIRMED';person_resolution_reason='exact_email_match';\n  manual_review=false;manual_review_reason=null;enrichment_status='processing';result_status='pending';routing_outcome=null;dispatch='NONTERMINAL';matched_employer_candidate=s.matched_employer_candidate;\n} else if(s.person_decision==='NOT_FOUND'){\n  person_resolution_status='NOT_FOUND';person_resolution_reason='provider_not_found';\n  manual_review=false;manual_review_reason=null;enrichment_status='processing';result_status='pending';routing_outcome=null;dispatch='NONTERMINAL';matched_employer_candidate=null;\n} else if(s.person_decision==='AMBIGUOUS'){\n  person_resolution_status='AMBIGUOUS';person_resolution_reason=s.person_decision_reason;\n  manual_review=true;manual_review_reason='person_identity_ambiguous';enrichment_status='manual_review';result_status='manual';routing_outcome='MANUAL_REVIEW';dispatch='AMBIGUOUS';matched_employer_candidate=null;\n} else {\n  return [{ json: { ...s, person_resolution_status:null, person_resolution_reason:null, person:null, matched_employer_candidate:null, person_resolution_evidence:null, manual_review:false, manual_review_reason:null, enrichment_status:'failed', result_status:'failed', routing_outcome:'FAILED', dispatch:'FAILED' } }];\n}\nconst hydStatus=hyd?hyd.status:'NOT_NEEDED';\nconst hydPerformed=!(hydStatus==='NOT_NEEDED');\nconst hydrateEvidenceStatus=hydPerformed?(hydStatus==='MATCH'?'success':hydStatus==='NO_MATCH'?'no_match':hydStatus==='INVALID_RESPONSE'?'invalid_response':'failed'):'not_needed';\nfunction evObs(o){ return o?{person_id:o.provider_person_id,name:o.name,linkedin_url:o.linkedin_url,title:o.title,organization:(o.organization?{organization_id:o.organization.provider_organization_id,name:o.organization.name,domain:o.organization.domain,linkedin_url:o.organization.linkedin_url}:null)}:null; }\nconst coreObs=(core.status==='MATCH')?evObs(corePerson):null;\nconst hydEvidenceObs=hydObs?evObs(hydObs):null;\nlet comparison;\nif(s.person_decision==='CONFIRMED')comparison='EXACT_EMAIL_MATCH';\nelse if(s.person_decision==='NOT_FOUND')comparison='NO_MATCH';\nelse comparison='IDENTITY_CONFLICT';\nconst person_resolution_evidence={ provider:'apollo',lookup_email:s.email||null,lookup_mode:'exact_email',lookup_performed:true,match_basis:(core.status==='MATCH')?'EXACT_EMAIL':null,supplied_identity:{name:s.supplied_name||null,name_quality:s.name_quality||null},core_observation:coreObs,hydration:{performed:hydPerformed,status:hydrateEvidenceStatus,attempts:(hyd&&hyd.diagnostics&&hyd.diagnostics.attempts)||0,error_code:(hyd&&hyd.diagnostics&&hyd.diagnostics.error_code)||null,observation:hydEvidenceObs},provider_identity_consistency:s.provider_identity_consistency||'INSUFFICIENT',profile_reference_consistency:s.profile_reference_consistency||'NONE',employer_candidate_consistency:s.employer_candidate_consistency||'NONE',employer_candidate_field_conflicts:s.employer_candidate_field_conflicts||[],name_corroboration:s.name_corroboration||'UNUSABLE',comparison };\nreturn [{ json: { ...s, person_resolution_status, person_resolution_reason, person, person_resolution_evidence, matched_employer_candidate, manual_review, manual_review_reason, enrichment_status, result_status, routing_outcome, dispatch } }];\n"
+      },
+      "name": "2B - Build Canonical Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        96
+      ],
+      "id": "1c8c93ff-beb3-4436-89af-b34448ad860b"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{};\nconst dc=s.person_decision;\nfunction ok(mode){\n  if(mode==='CONFIRMED') return s.person_resolution_status==='CONFIRMED'&&s.person_resolution_reason==='exact_email_match'&&s.person!==null&&s.person.provider_refs&&s.person.provider_refs.apollo_person_id&&s.person.current_title===null&&s.manual_review===false&&s.manual_review_reason===null&&s.enrichment_status==='processing'&&s.result_status==='pending'&&s.routing_outcome===null;\n  if(mode==='NOT_FOUND') return s.person_resolution_status==='NOT_FOUND'&&s.person_resolution_reason==='provider_not_found'&&s.person===null&&s.matched_employer_candidate===null&&s.manual_review===false&&s.manual_review_reason===null&&s.enrichment_status==='processing'&&s.result_status==='pending'&&s.routing_outcome===null;\n  if(mode==='SKIPPED_ROLE_INBOX') return s.person_resolution_status==='SKIPPED_ROLE_INBOX'&&s.person_resolution_reason==='role_inbox'&&s.person===null&&s.matched_employer_candidate===null&&s.person_resolution_evidence!==null&&s.person_resolution_evidence.provider===null&&s.person_resolution_evidence.lookup_performed===false&&s.manual_review===false&&s.manual_review_reason===null&&s.enrichment_status==='processing'&&s.result_status==='pending'&&s.routing_outcome===null;\n  if(mode==='AMBIGUOUS') return s.person_resolution_status==='AMBIGUOUS'&&(s.person_resolution_reason==='supplied_name_conflict'||s.person_resolution_reason==='provider_identity_conflict')&&s.person===null&&s.matched_employer_candidate===null&&s.manual_review===true&&s.manual_review_reason==='person_identity_ambiguous'&&s.enrichment_status==='manual_review'&&s.result_status==='manual'&&s.routing_outcome==='MANUAL_REVIEW';\n  if(mode==='FAILED') return s.person_resolution_status===null&&s.person_resolution_reason===null&&s.person===null&&s.matched_employer_candidate===null&&s.manual_review===false&&s.manual_review_reason===null&&s.enrichment_status==='failed'&&s.result_status==='failed'&&s.routing_outcome==='FAILED';\n  return false;\n}\nlet dispatch;\nif(dc==='CONFIRMED'||dc==='NOT_FOUND'||dc==='SKIPPED_ROLE_INBOX')dispatch=ok(dc)?'NONTERMINAL':'FAILED';\nelse if(dc==='AMBIGUOUS')dispatch=ok('AMBIGUOUS')?'AMBIGUOUS':'FAILED';\nelse dispatch=ok('FAILED')?'FAILED':'FAILED';\nreturn [{json:{...s,dispatch}}];\n"
+      },
+      "name": "2B - Final Conformance Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        96
+      ],
+      "id": "627943bd-61ff-42f8-9acb-341dfa3166e8"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "a88cac85-4bf5-4e3e-a640-0ad06a2f83b1",
+                    "leftValue": "={{ $json.dispatch }}",
+                    "rightValue": "NONTERMINAL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "e36175fe-946f-46e3-ae6d-e10c6c1ad00f",
+                    "leftValue": "={{ $json.dispatch }}",
+                    "rightValue": "AMBIGUOUS",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "9db42501-a5ed-498b-9f32-47c77adb6223",
+                    "leftValue": "={{ $json.dispatch }}",
+                    "rightValue": "FAILED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 2
+        }
+      },
+      "name": "2B - Branch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -240,
+        96
+      ],
+      "id": "6ed9ce4f-53d0-460b-a005-9bd7a4697ab3"
+    },
+    {
+      "parameters": {},
+      "name": "2B - Continue to 2C Gate",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "9bdebf73-1d66-46bd-96df-c1bbfb9a9678"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{};\nconst recordId=s.airtable_record_id||s.recordId||'';\nconst ac = s.account_resolution || null;\nconst body = { fields: {\n  \"Domain Status\": s.domain_status,\n  \"Is Personal Domain\": s.is_personal_domain,\n  \"Is Role Inbox\": s.is_role_inbox,\n  \"Name Quality\": s.name_quality,\n  \"Name Quality Reason\": s.name_quality_reason,\n  \"Account Resolution Status\": s.account_resolution_status,\n  \"Account Resolution Reason\": s.account_resolution_reason,\n  \"Account Resolution\": ac ? JSON.stringify(ac) : null,\n  \"Account Company\": s.account_company ? JSON.stringify(s.account_company) : null,\n  \"Account Candidates\": Array.isArray(s.account_candidates) ? JSON.stringify(s.account_candidates) : null,\n  \"Company Context\": s.company_context ? JSON.stringify(s.company_context) : null,\n  \"Provider Diagnostics\": s.provider_diagnostics ? JSON.stringify(s.provider_diagnostics) : null,\n  \"Person Resolution Status\": s.person_resolution_status,\n  \"Person Resolution Reason\": s.person_resolution_reason,\n  \"Person Resolution Evidence\": s.person_resolution_evidence ? JSON.stringify(s.person_resolution_evidence) : null,\n  \"Person\": s.person ? JSON.stringify(s.person) : null,\n  \"Matched Employer Candidate\": s.matched_employer_candidate ? JSON.stringify(s.matched_employer_candidate) : null,\n  \"Manual Review Needed\": s.manual_review,\n  \"Manual Review Reason\": s.manual_review_reason,\n  \"Enrichment Status\": s.enrichment_status,\n  \"Result Status\": s.result_status,\n  \"Routing Outcome\": s.routing_outcome\n} };\nreturn [{json:{method:'PATCH',url:'https://api.airtable.com/v0/appn5d5Ca7g9IyNMf/tblnUG3bEN2QqyKT4/'+recordId,body,_2b_pre_state:s}}];\n"
+      },
+      "name": "2B - Pack Terminal Persist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        224
+      ],
+      "id": "c97695d4-8a85-41d0-a8e4-93c898ead809"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "aNAdZLwDzBb7oHe5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/aNAdZLwDzBb7oHe5",
+          "cachedResultName": "Airtable Request Retry (transient-only)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "2B - Persist",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        208,
+        224
+      ],
+      "retryOnFail": false,
+      "id": "356bd650-d85f-412b-af19-2cc4fce9a828",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "name": "2B - Terminal Stop",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        432,
+        160
+      ],
+      "id": "a3b14fdc-2dde-4379-b1a3-0bf77f955ac6"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst pre = $('2B - Pack Terminal Persist').first().json._2b_pre_state || ($('2B - Input').first().json||{});\nconst out = { ...pre,\n  manual_review: false, manual_review_reason: null,\n  enrichment_status: 'failed', result_status: 'failed', routing_outcome: 'FAILED',\n  persistence_failure: { failed_at: new Date().toISOString(), reason: 'terminal_persistence_failed', after_retry_policy: true }\n};\nreturn [{ json: out }];\n"
+      },
+      "name": "2B - Terminal Persist Failed (global, no recursive write)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        304
+      ],
+      "id": "2e3ebaad-5a29-47e9-9595-201265810d8e"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2B - Input": {
+      "main": [
+        [
+          {
+            "node": "2B - Upstream Contract Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Upstream Contract Gate": {
+      "main": [
+        [
+          {
+            "node": "2B - Gate Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Gate Passed?": {
+      "main": [
+        [
+          {
+            "node": "2B - Role Inbox?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Build Contract Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Build Contract Error": {
+      "main": [
+        [
+          {
+            "node": "2B - Build Canonical Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Role Inbox?": {
+      "main": [
+        [
+          {
+            "node": "2B - Build Role Inbox Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Prepare Person Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Build Role Inbox Outcome": {
+      "main": [
+        [
+          {
+            "node": "2B - Build Canonical Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Prepare Person Match": {
+      "main": [
+        [
+          {
+            "node": "2B - Apollo Person Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Apollo Person Match": {
+      "main": [
+        [
+          {
+            "node": "2B - Core Adapter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Core Retry Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Core Adapter": {
+      "main": [
+        [
+          {
+            "node": "2B - Core Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Core Retry Classifier": {
+      "main": [
+        [
+          {
+            "node": "2B - Core Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Core Retry?": {
+      "main": [
+        [
+          {
+            "node": "2B - Core Retry Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Core Error Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Core Retry Wait": {
+      "main": [
+        [
+          {
+            "node": "2B - Apollo Person Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Core Error Result": {
+      "main": [
+        [
+          {
+            "node": "2B - Build Canonical Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Hydration Needed?": {
+      "main": [
+        [
+          {
+            "node": "2B - Prepare Hydration",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Merge Provider Observations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Prepare Hydration": {
+      "main": [
+        [
+          {
+            "node": "2B - Apollo Person Hydration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Apollo Person Hydration": {
+      "main": [
+        [
+          {
+            "node": "2B - Hydration Adapter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Hydration Retry Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Hydration Adapter": {
+      "main": [
+        [
+          {
+            "node": "2B - Merge Provider Observations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Hydration Retry Classifier": {
+      "main": [
+        [
+          {
+            "node": "2B - Hydration Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Hydration Retry?": {
+      "main": [
+        [
+          {
+            "node": "2B - Hydration Retry Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Hydration Failure Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Hydration Retry Wait": {
+      "main": [
+        [
+          {
+            "node": "2B - Apollo Person Hydration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Hydration Failure Result": {
+      "main": [
+        [
+          {
+            "node": "2B - Merge Provider Observations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Merge Provider Observations": {
+      "main": [
+        [
+          {
+            "node": "2B - Profile Anchor Missing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Name Corroboration": {
+      "main": [
+        [
+          {
+            "node": "2B - Final Person Resolution Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Final Person Resolution Decision": {
+      "main": [
+        [
+          {
+            "node": "2B - Build Canonical Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Build Canonical Output": {
+      "main": [
+        [
+          {
+            "node": "2B - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Final Conformance Gate": {
+      "main": [
+        [
+          {
+            "node": "2B - Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Pack Terminal Persist": {
+      "main": [
+        [
+          {
+            "node": "2B - Persist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Persist": {
+      "main": [
+        [
+          {
+            "node": "2B - Terminal Stop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Terminal Persist Failed (global, no recursive write)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Branch": {
+      "main": [
+        [
+          {
+            "node": "2B - Continue to 2C Gate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Pack Terminal Persist",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Pack Terminal Persist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Core Status": {
+      "main": [
+        [
+          {
+            "node": "2B - Hydration Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Merge Provider Observations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Merge Provider Observations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Profile Anchor Missing?": {
+      "main": [
+        [
+          {
+            "node": "2B - Build Missing Anchor Search",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2B - Name Corroboration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Build Missing Anchor Search": {
+      "main": [
+        [
+          {
+            "node": "2B - Tavily Missing Anchor Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Tavily Missing Anchor Search": {
+      "main": [
+        [
+          {
+            "node": "2B - Resolve Missing Anchor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2B - Resolve Missing Anchor": {
+      "main": [
+        [
+          {
+            "node": "2B - Name Corroboration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c51b0119-c2e5-4444-b5d0-466195df7c5b",
+  "meta": {
+    "instanceId": "103be981e8db8e32f88742df1e25a9d1be5dab7bb54ee11dc0f02d3c1876b528"
+  },
+  "nodeGroups": [],
+  "id": "K4rOSfm9N6jraUyh",
+  "tags": []
+}

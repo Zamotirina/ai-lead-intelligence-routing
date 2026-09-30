@@ -1,0 +1,287 @@
+{
+  "name": "Airtable Request Retry (transient-only)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        48
+      ],
+      "id": "4c191964-2bf1-46e2-a167-3355cd104e2b"
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.method }}",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Execute Workflow Trigger').first().json.body ?? {}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "name": "Airtable HTTP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        304,
+        48
+      ],
+      "id": "3e040632-8b99-4982-a023-53733b0a39af",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ZAsyVSjEATqpQKOl",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "let prevAttempt = 0;\n\ntry {\n  const w = $('Retry Wait').first();\n\n  if (\n    w &&\n    w.json &&\n    typeof w.json.attempt === 'number'\n  ) {\n    prevAttempt = w.json.attempt;\n  }\n} catch (e) {}\n\nconst rawStatus =\n  $json?.statusCode ??\n  $json?.status ??\n  $json?.error?.statusCode ??\n  $json?.error?.status;\n\nconst parsedStatus = Number(rawStatus);\n\nconst status = Number.isFinite(parsedStatus)\n  ? parsedStatus\n  : null;\n\nconst msg = [\n  $json?.error?.message,\n  $json?.error?.description,\n  $json?.error?.code,\n  $json?.message,\n  $json?.error_description,\n  JSON.stringify($json?.error ?? {}),\n]\n  .filter(Boolean)\n  .join(' ')\n  .toLowerCase();\n\nlet outcome = 'FAIL';\nlet transient = false;\n\n// Normal HTTP response\nif (status !== null) {\n\n  // 2xx = success\n  if (status >= 200 && status < 300) {\n    outcome = 'SUCCESS';\n  }\n\n  // 429 / 5xx = retryable\n  else if (status === 429 || status >= 500) {\n    transient = true;\n    outcome = 'RETRY';\n  }\n\n  // any other HTTP status = fail fast\n  else {\n    outcome = 'FAIL';\n  }\n\n} else {\n\n  // Transport/network failures\n  const TRANSPORT_TRANSIENT =\n    /timeout|timed out|etimedout|econnreset|econnrefused|econnaborted|network|socket|enotfound|eai_again|connect timeout|aborted/i;\n\n  if (TRANSPORT_TRANSIENT.test(msg)) {\n    transient = true;\n    outcome = 'RETRY';\n  } else {\n    outcome = 'FAIL';\n  }\n}\n\n// Count only failed/retry attempts\nconst attempt = outcome === 'SUCCESS'\n  ? prevAttempt\n  : prevAttempt + 1;\n\nconst exhausted =\n  outcome === 'RETRY' && attempt >= 3;\n\nif (exhausted) {\n  outcome = 'FAIL';\n}\n\nconst delayMs =\n  attempt <= 1 ? 2000 : 5000;\n\nreturn [{\n  json: {\n    method:\n      $json?.method ??\n      $('Execute Workflow Trigger').first().json.method,\n\n    url:\n      $json?.url ??\n      $('Execute Workflow Trigger').first().json.url,\n\n    body:\n      $json?.body ??\n      $('Execute Workflow Trigger').first().json.body ??\n      null,\n\n    outcome,\n    attempt,\n    delayMs,\n    exhausted,\n    transient,\n    status,\n\n    response:\n      $json?.body ??\n      $json,\n\n    message: [\n      $json?.error?.message,\n      $json?.error?.description,\n      $json?.error?.code,\n      $json?.message,\n      $json?.error_description,\n    ]\n      .filter(Boolean)\n      .join(' ')\n  }\n}];"
+      },
+      "name": "Classify Retry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        176
+      ],
+      "id": "01cb3fa3-eaad-4094-a9d9-f0c74aac8ebc"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delayMs / 1000 }}"
+      },
+      "name": "Retry Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1184,
+        112
+      ],
+      "id": "379dab96-4172-4fec-80ec-24854727a24d",
+      "webhookId": "33bfb8da-2a31-449f-92ee-901c4c744399"
+    },
+    {
+      "parameters": {
+        "jsCode": "const attempt = $json.attempt ?? 1;\nconst status = $json.status ?? 'unknown';\n\nthrow new Error(\n  'Airtable request failed after ' + attempt + ' attempt(s), status ' + status\n);\n"
+      },
+      "name": "Terminal Fail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        288
+      ],
+      "id": "2c2f8dcc-93f2-43b5-bd4b-40f8598f8c98"
+    },
+    {
+      "parameters": {},
+      "name": "Success Out",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1072,
+        -48
+      ],
+      "id": "d938d0ca-fa01-4272-98b8-18661d53540c"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "SUCCESS",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "13002c5b-06a8-4603-b406-6d1261552788"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SUCCESS"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "13390601-1b90-4d14-bb6b-d1c2b7e1b534",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "RETRY",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "RETRY"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "1a462e6b-55b0-44b7-be5f-5b39e996d1a8",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "FAIL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "FAIL"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        752,
+        176
+      ],
+      "id": "2b1637e9-3810-477b-a30d-ddecc28d5cdb",
+      "name": "Switch"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Airtable HTTP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable HTTP": {
+      "main": [
+        [
+          {
+            "node": "Classify Retry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Classify Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Retry": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Wait": {
+      "main": [
+        [
+          {
+            "node": "Airtable HTTP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Success Out",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retry Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Terminal Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "15efc807-25c6-4d6b-b143-5e82e1f538d4",
+  "meta": {
+    "instanceId": "103be981e8db8e32f88742df1e25a9d1be5dab7bb54ee11dc0f02d3c1876b528"
+  },
+  "nodeGroups": [],
+  "id": "aNAdZLwDzBb7oHe5",
+  "tags": []
+}

@@ -1,0 +1,286 @@
+{
+  "name": "2E Provider — Apollo HR Discovery v1 (LIVE)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "23800aa8-e5bd-4c0e-96f0-57c3ea81b1ef",
+      "name": "2E Discovery - Entry",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1440,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json || {};\n\nfunction fail(detail) {\n  return [{ json: { ...s, _2e_fail: { code: 'INTERNAL_CONTRACT_ERROR', detail } } }];\n}\n\nif (s._2e_fail) return [{ json: s }];\n\nif (!s.account_company || typeof s.account_company !== 'object' || Array.isArray(s.account_company)) {\n  return fail('account_company missing at live HR discovery provider entry');\n}\n\nconst orgId = s.account_company.provider_refs && s.account_company.provider_refs.apollo_organization_id;\nif (typeof orgId !== 'string' || !orgId.trim()) {\n  return fail('account_company.provider_refs.apollo_organization_id missing at live HR discovery provider entry');\n}\n\nconst limit = s._2e && s._2e.DISCOVERY_FETCH_LIMIT;\nif (!Number.isInteger(limit) || limit <= 0) {\n  return fail('_2e.DISCOVERY_FETCH_LIMIT missing or invalid at live HR discovery provider entry');\n}\nif (limit !== 15) {\n  return fail('live HR discovery expects frozen DISCOVERY_FETCH_LIMIT=15');\n}\n\nconst titles = [\"recruiting operations\", \"recruitment operations\", \"talent acquisition operations\", \"ta operations\", \"recruiting program\", \"recruitment program\", \"talent acquisition\", \"talent sourcing\", \"talent partner\", \"talent recruiter\", \"talent recruiting\", \"sourcer\", \"recruiter\", \"recruiting\", \"recruitment\", \"staffing\", \"headhunter\", \"headhunting\", \"people operations\", \"people ops\", \"people partner\", \"people and culture\", \"employee experience\", \"talent management\", \"talent development\", \"people analytics\", \"chief people officer\", \"chief talent officer\", \"human resources\", \"human resource\", \"human resources business partner\", \"hr business partner\", \"employee relations\", \"hr\", \"hrbp\", \"hris\"];\n\nconst params = [];\nparams.push('organization_ids[]=' + encodeURIComponent(orgId.trim()));\nfor (const t of titles) params.push('person_titles[]=' + encodeURIComponent(t));\nparams.push('include_similar_titles=true');\nparams.push('page=1');\nparams.push('per_page=' + encodeURIComponent(String(limit)));\n\nconst url =\n  'https://api.apollo.io/api/v1/mixed_people/api_search?' +\n  params.join('&');\n\nconst clean = { ...s };\ndelete clean._2e_provider_raw;\ndelete clean._2e_transport;\n\nreturn [{\n  json: {\n    ...clean,\n    _disc_live: {\n      provider: 'apollo',\n      operation: 'hr_people_discovery',\n      endpoint_identity: 'https://api.apollo.io/api/v1/mixed_people/api_search',\n      organization_id: orgId.trim(),\n      person_titles: titles,\n      include_similar_titles: true,\n      page: 1,\n      per_page: limit,\n      url,\n      attempt: 1,\n      attempt_result: null,\n      retry_delay_ms: null\n    }\n  }\n}];\n"
+      },
+      "id": "4e2ced2a-e809-4a2a-adb4-6e214d520967",
+      "name": "2E Discovery - Init Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json || {};\nif (s._2e_fail) return [{ json: s }];\n\nconst d = s._disc_live || {};\nif (d.operation !== 'hr_people_discovery') {\n  return [{ json: { ...s, _2e_fail: { code:'INTERNAL_CONTRACT_ERROR', detail:'invalid discovery operation before HTTP call' } } }];\n}\nif (typeof d.url !== 'string' || !d.url.startsWith('https://api.apollo.io/api/v1/mixed_people/api_search?')) {\n  return [{ json: { ...s, _2e_fail: { code:'INTERNAL_CONTRACT_ERROR', detail:'invalid Apollo discovery URL before HTTP call' } } }];\n}\nif (!Number.isInteger(d.attempt) || d.attempt < 1 || d.attempt > 3) {\n  return [{ json: { ...s, _2e_fail: { code:'INTERNAL_CONTRACT_ERROR', detail:'invalid discovery attempt counter before HTTP call' } } }];\n}\nreturn [{ json: s }];\n"
+      },
+      "id": "81d3426e-c1db-4ddf-b6f9-2e79c22f9e44",
+      "name": "2E Discovery - Prepare HTTP Attempt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json._disc_live.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $vars.APOLLO_API_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "822bc8a6-5648-483a-96c4-2d63e26e017f",
+      "name": "2E Discovery - Apollo People Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -720,
+        128
+      ],
+      "retryOnFail": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst incoming = $input.first().json || {};\nlet s;\ntry { s = $('2E Discovery - Prepare HTTP Attempt').item.json || {}; }\ncatch (e) { s = {}; }\n\nif (s._2e_fail) return [{ json: s }];\n\nconst d = s._disc_live || {};\nconst attempt = Number(d.attempt || 1);\n\nfunction errText(x) {\n  if (x === null || x === undefined) return '';\n  if (typeof x === 'string') return x;\n  try { return JSON.stringify(x); } catch (e) { return String(x); }\n}\n\nfunction statusCodeOf(o) {\n  const vals = [\n    o.statusCode,\n    o.status_code,\n    o.http_status,\n    o.error && o.error.statusCode,\n    o.error && o.error.status\n  ];\n  for (const v of vals) {\n    const n = Number(v);\n    if (Number.isInteger(n) && n >= 100 && n <= 599) return n;\n  }\n  const m = errText(o.error || o.message || '').match(/\\b([1-5]\\d{2})\\b/);\n  return m ? Number(m[1]) : null;\n}\n\nconst http = statusCodeOf(incoming);\nconst nodeError = incoming.error ? errText(incoming.error).toLowerCase() : '';\n\nlet retry = false;\nlet transientExhausted = false;\nlet envelopeValid = false;\nlet people = null;\nlet transportClass = null;\nlet errorCode = null;\n\nif (incoming.error && http === null) {\n  const cls = /timeout|timed out|etimedout/.test(nodeError) ? 'TIMEOUT' : 'NETWORK_ERROR';\n  retry = attempt < 3;\n  transientExhausted = attempt >= 3;\n  transportClass = transientExhausted ? 'TRANSIENT_EXHAUSTED' : cls;\n  errorCode = cls;\n}\nelse if (\n  http === 408 ||\n  http === 425 ||\n  http === 429 ||\n  (http !== null && http >= 500 && http <= 599)\n) {\n  retry = attempt < 3;\n  transientExhausted = attempt >= 3;\n  transportClass = transientExhausted ? 'TRANSIENT_EXHAUSTED' : ('HTTP_TRANSIENT_' + http);\n  errorCode = 'HTTP_' + http;\n}\nelse if (http === 401 || http === 403) {\n  transportClass = 'HTTP_' + http;\n  errorCode = 'HTTP_' + http;\n}\nelse if (http !== null && (http < 200 || http >= 300)) {\n  transportClass = 'HTTP_' + http;\n  errorCode = 'HTTP_' + http;\n}\nelse {\n  const body = incoming.body !== undefined ? incoming.body : incoming;\n  if (body && typeof body === 'object' && !Array.isArray(body) && Array.isArray(body.people)) {\n    envelopeValid = true;\n    people = body.people;\n    transportClass = 'SUCCESS';\n    errorCode = null;\n  } else {\n    transportClass = 'INVALID_SHARED_ENVELOPE';\n    errorCode = 'MALFORMED_TOP_LEVEL_COLLECTION';\n  }\n}\n\nconst retryDelayMs = retry ? (attempt === 1 ? 2000 : 5000) : null;\n\nreturn [{\n  json: {\n    ...s,\n    _disc_live: {\n      ...d,\n      attempt_result: {\n        retry,\n        transient_exhausted: transientExhausted,\n        envelope_valid: envelopeValid,\n        people,\n        http_status: http,\n        transport_class: transportClass,\n        error_code: errorCode\n      },\n      retry_delay_ms: retryDelayMs\n    }\n  }\n}];\n"
+      },
+      "id": "437a1f18-acc6-4e65-8fe1-d177d7481df5",
+      "name": "2E Discovery - Classify Attempt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json._disc_live && $json._disc_live.attempt_result && $json._disc_live.attempt_result.retry === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b4079fe5-afb6-4e8d-a063-3ae1e48ad721",
+      "name": "2E Discovery - Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json || {};\nif (s._2e_fail) return [{ json:s }];\n\nconst d = s._disc_live || {};\nconst ar = d.attempt_result || {};\n\nif (ar.retry !== true) {\n  return [{ json:{ ...s, _2e_fail:{ code:'INTERNAL_CONTRACT_ERROR', detail:'discovery retry advance reached without retry=true' } } }];\n}\n\nconst nextAttempt = Number(d.attempt || 1) + 1;\nif (nextAttempt > 3) {\n  return [{ json:{ ...s, _2e_fail:{ code:'INTERNAL_CONTRACT_ERROR', detail:'discovery retry exceeded 3 attempts' } } }];\n}\n\nreturn [{\n  json: {\n    ...s,\n    _disc_live: {\n      ...d,\n      attempt: nextAttempt,\n      attempt_result: null\n    }\n  }\n}];\n"
+      },
+      "id": "5ea85d7f-1e1c-4d6e-828b-093339bcd36c",
+      "name": "2E Discovery - Advance Retry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json._disc_live.retry_delay_ms / 1000 }}"
+      },
+      "id": "70adc705-cacd-4c3a-bf02-d54025599ecf",
+      "name": "2E Discovery - Retry Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        0
+      ],
+      "webhookId": "5cc3461e-c4ac-4e9e-b938-e92176c571c2"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $input.first().json || {};\nif (s._2e_fail) return [{ json:s }];\n\nconst d = s._disc_live || {};\nconst ar = d.attempt_result || {};\nconst now = new Date().toISOString();\n\nif (ar.retry === true) {\n  return [{\n    json: {\n      ...s,\n      _2e_fail: {\n        code: 'INTERNAL_CONTRACT_ERROR',\n        detail: 'discovery finalize reached while retry still required'\n      }\n    }\n  }];\n}\n\nlet raw;\n\nif (ar.envelope_valid === true && Array.isArray(ar.people)) {\n  const candidates = ar.people.map((p, idx) => {\n    const person = (p && typeof p === 'object' && !Array.isArray(p)) ? p : {};\n    return {\n      person_id:\n        typeof person.id === 'string' && person.id.trim()\n          ? person.id.trim()\n          : null,\n      name: null,\n      linkedin_url: null,\n      title:\n        typeof person.title === 'string' && person.title.trim()\n          ? person.title.trim()\n          : null,\n      organization_name:\n        person.organization &&\n        typeof person.organization.name === 'string' &&\n        person.organization.name.trim()\n          ? person.organization.name.trim()\n          : null,\n      provider_rank: idx + 1\n    };\n  });\n\n  raw = {\n    provider: 'apollo',\n    envelope_valid: true,\n    candidates\n  };\n} else {\n  raw = {\n    provider: 'apollo',\n    envelope_valid: false,\n    candidates: []\n  };\n}\n\nconst out = {\n  ...s,\n  _2e_provider_raw: raw,\n  _2e_transport: {\n    attempts: Number(d.attempt || 1),\n    http_status:\n      Number.isInteger(ar.http_status)\n        ? ar.http_status\n        : null,\n    error_code: ar.error_code || null,\n    transport_class: ar.transport_class || null,\n    transient_exhausted: ar.transient_exhausted === true\n  },\n  _2e_now: now\n};\n\ndelete out._disc_live;\n\nreturn [{ json: out }];\n"
+      },
+      "id": "d9f70113-cab6-45ee-9e0a-4bc7d61420a0",
+      "name": "2E Discovery - Return Provider Envelope",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        240
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2E Discovery - Entry": {
+      "main": [
+        [
+          {
+            "node": "2E Discovery - Init Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Discovery - Init Request": {
+      "main": [
+        [
+          {
+            "node": "2E Discovery - Prepare HTTP Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Discovery - Prepare HTTP Attempt": {
+      "main": [
+        [
+          {
+            "node": "2E Discovery - Apollo People Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Discovery - Apollo People Search": {
+      "main": [
+        [
+          {
+            "node": "2E Discovery - Classify Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Discovery - Classify Attempt": {
+      "main": [
+        [
+          {
+            "node": "2E Discovery - Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Discovery - Retry?": {
+      "main": [
+        [
+          {
+            "node": "2E Discovery - Advance Retry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2E Discovery - Return Provider Envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Discovery - Advance Retry": {
+      "main": [
+        [
+          {
+            "node": "2E Discovery - Retry Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Discovery - Retry Wait": {
+      "main": [
+        [
+          {
+            "node": "2E Discovery - Prepare HTTP Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "349552a5-a67d-42c4-bf57-3686c6e740fb",
+  "meta": {
+    "instanceId": "103be981e8db8e32f88742df1e25a9d1be5dab7bb54ee11dc0f02d3c1876b528"
+  },
+  "nodeGroups": [],
+  "id": "plCLNeXb5eX6WwhE",
+  "tags": []
+}

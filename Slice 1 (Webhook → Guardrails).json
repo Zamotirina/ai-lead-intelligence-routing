@@ -1,0 +1,945 @@
+{
+  "name": "Slice 1 (Webhook → Guardrails)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "1bfc9cb3-66d1-4ed5-8c0b-d2c69bf8d7a6",
+        "options": {}
+      },
+      "name": "Airtable Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1536,
+        208
+      ],
+      "webhookId": "1bfc9cb3-66d1-4ed5-8c0b-d2c69bf8d7a6",
+      "id": "1b182adf-a70b-4781-9154-5c3a46bb1ea1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nconst recordId =\n  input.body?.recordId ??\n  input.recordId;\n\nif (!recordId) {\n  throw new Error(\n    `recordId not found. Input: ${JSON.stringify(input)}`\n  );\n}\n\nreturn [\n  {\n    json: {\n      recordId,\n      method: \"GET\",\n      url: `https://api.airtable.com/v0/appn5d5Ca7g9IyNMf/tblnUG3bEN2QqyKT4/${recordId}`,\n      body: null\n    }\n  }\n];"
+      },
+      "name": "Pack Load",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        208
+      ],
+      "id": "94f2a017-7cac-454d-a249-7f98bb32c5c7"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "aNAdZLwDzBb7oHe5",
+          "mode": "id",
+          "cachedResultUrl": "/workflow/aNAdZLwDzBb7oHe5"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "Load Lead (retry)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -1216,
+        -16
+      ],
+      "id": "e89baec5-ed56-4fe9-8bc1-d3e7324443cb"
+    },
+    {
+      "parameters": {
+        "jsCode": "const PROCESSING_STALE_AFTER_MINUTES = 10;\n\nconst TERMINAL = new Set([\n  'completed',\n  'manual_review',\n  'privacy_stop',\n  'invalid_input',\n  'failed'\n]);\n\n// Input from Load Lead (retry)\nconst item = $input.first().json;\n\n// Retry workflow wraps Airtable response into body\nconst airtableRecord = item?.body ?? item;\n\nconst fields = airtableRecord?.fields ?? {};\nconst recordId = airtableRecord?.id ?? airtableRecord?.recordId ?? '';\n\n// Fail loudly instead of accidentally treating missing data as a new record\nif (!recordId) {\n  throw new Error(\n    `Idempotency Guard: recordId is missing. Input: ${JSON.stringify(item)}`\n  );\n}\n\n// Original webhook data\nconst webhook = $('Airtable Trigger').first().json;\nconst headers = webhook?.headers ?? {};\nconst webhookBody = webhook?.body ?? {};\n\n// Optional forced rerun\nconst rerunSecret =\n  typeof $vars !== 'undefined'\n    ? ($vars.LEAD_INTELLIGENCE_RERUN_SECRET ?? '')\n    : '';\n\nconst suppliedToken =\n  headers['x-lead-rerun-secret'] ??\n  webhookBody.control_rerun_token ??\n  '';\n\nconst forceRerun = !!(\n  rerunSecret &&\n  suppliedToken &&\n  suppliedToken === rerunSecret\n);\n\nconst enrichmentStatus = fields['Enrichment Status'] ?? '';\nconst startedAtRaw = fields['Processing Started At'] ?? '';\n\nlet proceed = true;\nlet reason = 'new_record';\n\nif (forceRerun) {\n  reason = 'force_rerun';\n} else if (TERMINAL.has(enrichmentStatus)) {\n  proceed = false;\n  reason = 'duplicate_terminal';\n} else if (enrichmentStatus === 'processing') {\n  let stale = true;\n\n  if (startedAtRaw) {\n    const startedAt = new Date(startedAtRaw).getTime();\n\n    if (\n      !Number.isNaN(startedAt) &&\n      (Date.now() - startedAt) <\n        PROCESSING_STALE_AFTER_MINUTES * 60 * 1000\n    ) {\n      stale = false;\n    }\n  }\n\n  if (!stale) {\n    proceed = false;\n    reason = 'duplicate_recent_processing';\n  } else {\n    reason = 'stale_reentry';\n  }\n}\n\nreturn [\n  {\n    json: {\n      recordId,\n      fields,\n      proceed,\n      idempotency_reason: reason,\n      run_id: $execution.id,\n      processing_started_at: new Date().toISOString(),\n      force_rerun: forceRerun\n    }\n  }\n];\n"
+      },
+      "name": "Idempotency Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        208
+      ],
+      "id": "e6d9ed33-3e1a-480c-a394-118dfb6c1ff7"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.proceed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "id": "7426f405-c2c2-4c24-933e-ae1be3d9daff"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Proceed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        208
+      ],
+      "id": "446a4acc-487f-4ae3-bbff-efad80b8f53b"
+    },
+    {
+      "parameters": {},
+      "name": "No-Op duplicate",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        384
+      ],
+      "id": "fe362219-3d37-4ce9-a1b1-5a14abdac74a"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst recordId = item.recordId;\n\nif (!recordId) {\n  throw new Error('recordId is missing');\n}\n\nconst runId = String(item.run_id ?? $execution.id);\nconst processingStartedAt =\n  item.processing_started_at ?? new Date().toISOString();\n\nreturn [{\n  json: {\n    method: \"PATCH\",\n    url: `https://api.airtable.com/v0/appn5d5Ca7g9IyNMf/tblnUG3bEN2QqyKT4/${recordId}`,\n    body: {\n      fields: {\n        \"Enrichment Status\": \"processing\",\n        \"Result Status\": \"pending\",\n        \"Last Run ID\": runId,\n        \"Processing Started At\": processingStartedAt,\n\n        \"Input Rejection Reason\": null,\n        \"Manual Review Needed\": false,\n        \"Manual Review Reason\": null,\n        \"Routing Outcome\": null,\n        \"Completed At\": null,\n\n        \"Domain Status\": null,\n        \"Is Personal Domain\": false,\n        \"Is Role Inbox\": false,\n        \"Name Quality\": null,\n        \"Name Quality Reason\": null,\n\n        \"Account Resolution Status\": null,\n        \"Account Resolution Reason\": null,\n        \"Account Resolution Evidence\": null,\n        \"Account Company\": null,\n\n        \"Person Resolution Status\": null,\n        \"Person Resolution Reason\": null,\n  \"Person Resolution Evidence\": null,\n        \"Person\": null,\n\n        \"Matched Employer Candidate\": null,\n        \"Inbound Employer Verification\": null,\n        \"Matched Employer\": null,\n\n        \"Organization Relationship\": null,\n        \"Org Relationship Reason\": null,\n        \"Org Relationship Source\": null,\n        \"Org Relationship Evidence\": null,\n\n        \"HR Discovery Status\": null,\n        \"HR Contacts\": null,\n        \"Flagged HR Contacts\": null\n      }\n    }\n  }\n}];"
+      },
+      "name": "Pack SetProcessing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -752,
+        -80
+      ],
+      "id": "8381dc67-f57b-4364-a150-efa8f61ead82"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "aNAdZLwDzBb7oHe5",
+          "mode": "id",
+          "cachedResultUrl": "/workflow/aNAdZLwDzBb7oHe5"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "Set Processing + Reset (retry)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -624,
+        160
+      ],
+      "id": "92a1b94d-4c7e-4af4-ba89-d6adfbd34b99"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nlet record;\n\nif (item && item.body) {\n  record = item.body;\n} else {\n  record = item;\n}\n\nlet fields = {};\n\nif (record && record.fields) {\n  fields = record.fields;\n}\n\nlet recordId = '';\n\nif (record && record.id) {\n  recordId = record.id;\n} else if (record && record.recordId) {\n  recordId = record.recordId;\n}\n\nif (!recordId) {\n  throw new Error(\n    'Input validation: recordId is missing. Input: ' +\n    JSON.stringify(item)\n  );\n}\n\n\n// --------------------\n// INPUT\n// --------------------\n\nconst first_name = String(\n  fields['Name'] ? fields['Name'] : ''\n).trim();\n\nconst last_name = String(\n  fields['Last Name'] ? fields['Last Name'] : ''\n).trim();\n\nconst email = String(\n  fields['Email'] ? fields['Email'] : ''\n).trim();\n\nconst run_id = fields['Last Run ID']\n  ? fields['Last Run ID']\n  : String($execution.id);\n\nconst processing_started_at = fields['Processing Started At']\n  ? fields['Processing Started At']\n  : '';\n\n\n// --------------------\n// FREE / PERSONAL EMAIL DOMAINS\n// --------------------\n\nconst FREE_EMAIL = new Set([\n  'gmail.com',\n  'googlemail.com',\n  'outlook.com',\n  'hotmail.com',\n  'live.com',\n  'msn.com',\n  'yahoo.com',\n  'ymail.com',\n  'icloud.com',\n  'me.com',\n  'mac.com',\n  'proton.me',\n  'protonmail.com',\n  'mail.ru',\n  'inbox.ru',\n  'list.ru',\n  'bk.ru',\n  'rambler.ru',\n  'aol.com',\n  'gmx.com',\n  'gmx.net',\n  'zoho.com'\n]);\n\n\n// --------------------\n// ROLE / SHARED INBOXES\n// --------------------\n\nconst ROLE_PREFIX = new Set([\n  'hr',\n  'jobs',\n  'careers',\n  'career',\n  'recruitment',\n  'recruiting',\n  'talent',\n  'people',\n  'info',\n  'hello',\n  'contact',\n  'support',\n  'sales',\n  'marketing',\n  'office',\n  'admin',\n  'team',\n  'operations',\n  'ops',\n  'hiring',\n  'work',\n  'jobseu',\n  'careerseu'\n]);\n\n\n// --------------------\n// NAME PLACEHOLDERS\n// --------------------\n\nconst PLACEHOLDER = new Set([\n  'test',\n  'asdf',\n  'qwerty',\n  'foo',\n  'bar',\n  'na',\n  'n/a',\n  'unknown',\n  'user',\n  'name',\n  'firstname',\n  'lastname',\n  'xxx',\n  'none'\n]);\n\n\n// --------------------\n// EMAIL PARSING\n// --------------------\n\nlet domain_status = 'INVALID_FORMAT';\nlet is_personal_domain = false;\nlet email_domain = '';\nlet email_local = '';\n\nconst em = email.match(/^([^@\\s]+)@([^@\\s]+\\.[^@\\s]+)$/);\n\nif (em) {\n  email_local = em[1].toLowerCase();\n  email_domain = em[2].toLowerCase();\n\n  if (FREE_EMAIL.has(email_domain)) {\n    domain_status = 'FREE_EMAIL';\n    is_personal_domain = true;\n  } else {\n    domain_status = 'BUSINESS';\n  }\n}\n\n\n// --------------------\n// SYSTEM / NO-REPLY INBOX\n// --------------------\n\nconst normLocal = email_local\n  .toLowerCase()\n  .replace(/[^a-z0-9]/g, '');\n\nconst SYSTEM_MAILBOX_PATTERN =\n  /noreply|donotreply|noresponse|jobalerts|jobalert|careeralerts|careeralert|notifications|notification|mailerdaemon|postmaster|bounce/i;\n\nconst is_system_inbox =\n  SYSTEM_MAILBOX_PATTERN.test(normLocal);\n\n\n// --------------------\n// ROLE / SHARED INBOX\n// --------------------\n\nconst emailTokens = email_local\n  .toLowerCase()\n  .split(/[._+\\-]+/)\n  .filter(function(token) {\n    return token.length > 0;\n  });\n\nlet roleTokenFound = false;\n\nfor (let i = 0; i < emailTokens.length; i++) {\n  if (ROLE_PREFIX.has(emailTokens[i])) {\n    roleTokenFound = true;\n    break;\n  }\n}\n\nlet is_role_inbox = false;\n\nif (!is_system_inbox) {\n  if (ROLE_PREFIX.has(normLocal) || roleTokenFound) {\n    is_role_inbox = true;\n  }\n}\n\n\n// --------------------\n// NAME QUALITY\n// --------------------\n\nconst letters = (first_name + last_name)\n  .replace(/[^A-Za-z]/g, '');\n\nconst combined =\n  (first_name + ' ' + last_name).trim();\n\nconst supplied_name =\n  combined ? combined : null;\n\nlet name_quality = 'VALID';\nlet name_quality_reason = null;\n\nif (!letters || letters.length < 2) {\n\n  name_quality = 'INVALID';\n  name_quality_reason =\n    'No usable alphabetic name characters.';\n\n} else if (\n  PLACEHOLDER.has(first_name.toLowerCase()) ||\n  PLACEHOLDER.has(last_name.toLowerCase()) ||\n  PLACEHOLDER.has(combined.toLowerCase()) ||\n  /(.)\\1{4,}/.test(letters)\n) {name_quality = 'INVALID';\n  name_quality_reason =\n    'Placeholder or gibberish name.';\n\n} else if (letters.length <= 2) {\n\n  name_quality = 'SUSPICIOUS';\n  name_quality_reason =\n    'Very short name; plausible but uncertain.';\n}\n\n\n// --------------------\n// OUTPUT\n// --------------------\n\nreturn [\n  {\n    json: {\n      recordId: recordId,\n\n      input: {\n        first_name: first_name,\n        last_name: last_name\n      },\n\n      email: email,\n      email_domain: email_domain,\n      email_local: email_local,\n\n      domain_status: domain_status,\n      is_personal_domain: is_personal_domain,\n      is_role_inbox: is_role_inbox,\n      is_system_inbox: is_system_inbox,\n\n      name_quality: name_quality,\n      name_quality_reason: name_quality_reason,\n      supplied_name: supplied_name,\n\n      run_id: run_id,\n      processing_started_at: processing_started_at\n    }\n  }\n];"
+      },
+      "name": "Normalize Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -432,
+        64
+      ],
+      "id": "1afa20c7-2190-438e-a435-521f1bf36c25"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.domain_status }}",
+                    "rightValue": "FREE_EMAIL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f3b8440e-44db-4550-8138-b4ebb29e98a7"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "122aad97-990d-4aae-a1a8-aa6ab2effb53",
+                    "leftValue": "={{ $json.domain_status }}",
+                    "rightValue": "INVALID_FORMAT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "b25e2569-a746-42e1-92ae-7217f0167f29",
+                    "leftValue": "={{ $json.domain_status }}",
+                    "rightValue": "BUSINESS",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "name": "Domain Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -176,
+        192
+      ],
+      "id": "978414d9-85ee-46bf-bb06-a1c3311cee06"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nlet recordId = '';\n\nif (item.recordId) {\n  recordId = String(item.recordId).trim();\n} else if (item.airtable_record_id) {\n  recordId = String(item.airtable_record_id).trim();\n} else if (item.body && item.body.id) {\n  recordId = String(item.body.id).trim();\n} else if (\n  item.body &&\n  item.body.fields &&\n  item.body.fields['Record ID']\n) {\n  recordId = String(item.body.fields['Record ID']).trim();\n}\n\nif (!recordId) {\n  throw new Error(\n    'Pack Privacy: recordId is missing. Input: ' +\n    JSON.stringify(item)\n  );\n}\n\nconst url =\n  'https://api.airtable.com/v0/appn5d5Ca7g9IyNMf/tblnUG3bEN2QqyKT4/' +\n  recordId;\n\nreturn [\n  {\n    json: {\n      method: 'PATCH',\n      url: url,\n      body: {\n        fields: {\n          'Enrichment Status': 'privacy_stop',\n          'Result Status': 'invalid',\n          'Routing Outcome': 'PRIVACY_STOP',\n          'Input Rejection Reason': 'personal_email',\n          'Person Resolution Status': 'SKIPPED_PRIVACY',\n          'Person Resolution Reason':\n            'Free or personal email address; identity resolution skipped.'\n        }\n      }\n    }\n  }\n];"
+      },
+      "name": "Pack Privacy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "bdb01949-343b-4dc1-ae4a-bbce6ff94344"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "aNAdZLwDzBb7oHe5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/aNAdZLwDzBb7oHe5",
+          "cachedResultName": "Airtable Request Retry (transient-only)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "Write privacy_stop (retry)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        144,
+        -176
+      ],
+      "id": "a938aba8-66d6-4ae8-9554-7a6dda096953"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nlet recordId = '';\n\nif (item.recordId) {\n  recordId = String(item.recordId).trim();\n} else if (item.airtable_record_id) {\n  recordId = String(item.airtable_record_id).trim();\n} else if (item.body && item.body.id) {\n  recordId = String(item.body.id).trim();\n} else if (\n  item.body &&\n  item.body.fields &&\n  item.body.fields['Record ID']\n) {\n  recordId = String(item.body.fields['Record ID']).trim();\n}\n\nif (!recordId) {\n  throw new Error(\n    'Pack Invalid: recordId is missing. Input: ' +\n    JSON.stringify(item)\n  );\n}\n\n\n// --------------------\n// READ GUARDRAILS\n// --------------------\n\nlet isSystemInbox = false;\nlet domainStatus = '';\nlet nameQuality = '';\n\nif (item.is_system_inbox === true) {\n  isSystemInbox = true;\n} else if (\n  item.body &&\n  item.body.fields &&\n  item.body.fields['Is System Inbox'] === true\n) {\n  isSystemInbox = true;\n}\n\nif (item.domain_status) {\n  domainStatus = String(item.domain_status);\n} else if (\n  item.body &&\n  item.body.fields &&\n  item.body.fields['Domain Status']\n) {\n  domainStatus = String(\n    item.body.fields['Domain Status']\n  );\n}\n\nif (item.name_quality) {\n  nameQuality = String(item.name_quality);\n} else if (\n  item.body &&\n  item.body.fields &&\n  item.body.fields['Name Quality']\n) {\n  nameQuality = String(\n    item.body.fields['Name Quality']\n  );\n}\n\n\n// --------------------\n// REJECTION REASON\n// --------------------\n\nlet rejectionReason = 'invalid_input';\n\nif (isSystemInbox === true) {\n  rejectionReason = 'system_inbox';\n} else if (domainStatus === 'INVALID_FORMAT') {\n  rejectionReason = 'invalid_email';\n} else if (nameQuality === 'INVALID') {\n  rejectionReason = 'invalid_name';\n}\n\n\n// --------------------\n// AIRTABLE PATCH\n// --------------------\n\nconst url =\n  'https://api.airtable.com/v0/appn5d5Ca7g9IyNMf/tblnUG3bEN2QqyKT4/' +\n  recordId;\n\nreturn [\n  {\n    json: {\n      method: 'PATCH',\n      url: url,\n      body: {\n        fields: {\n          'Enrichment Status': 'invalid_input',\n          'Result Status': 'invalid',\n          'Routing Outcome': 'INVALID_INPUT',\n          'Input Rejection Reason': rejectionReason\n        }\n      }\n    }\n  }\n];"
+      },
+      "name": "Pack Invalid",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        144
+      ],
+      "id": "ed52eab0-5359-4048-a32a-a8ff238f3643"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "aNAdZLwDzBb7oHe5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/aNAdZLwDzBb7oHe5",
+          "cachedResultName": "Airtable Request Retry (transient-only)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "Write invalid_input (retry)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        208,
+        16
+      ],
+      "id": "cfcaba81-7938-4ee9-9de8-77623818f45e"
+    },
+    {
+      "parameters": {
+        "jsCode": "const n = $('Normalize Validate').first().json;\n\nreturn [{\n  json: {\n    normalized: n\n  }\n}];\n"
+      },
+      "name": "Root Divergent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        560
+      ],
+      "id": "4b3e01c4-ed35-4899-93a9-1b274383d14e"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s = $('Root Divergent').first().json;\nreturn [{ json: { email_domain: s.normalized.email_domain } }];\n"
+      },
+      "name": "Verify Pack",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        560
+      ],
+      "id": "07d03e8f-59d6-4a4c-a797-4a8b95439740"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "GOazYrD9iDhWTH9t",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/GOazYrD9iDhWTH9t",
+          "cachedResultName": "Verify Mail Domain"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [
+            "email_domain"
+          ],
+          "schema": [
+            {
+              "id": "email_domain",
+              "displayName": "email_domain",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "Verify Mail Domain",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        272
+      ],
+      "id": "d268a617-5525-4307-a17c-29c7b40bb5b8"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst n = $('Normalize Validate').first().json;\n\nconst status = String(\n  d.domain_verification_status\n    ? d.domain_verification_status\n    : ''\n);\n\nconst reason = d.domain_verification_reason\n  ? String(d.domain_verification_reason)\n  : null;\n\nlet terminal = null;\n\nif (status === 'INVALID_DOMAIN') {\n  terminal = 'invalid_domain';\n}\n\nif (status === 'TECHNICAL_ERROR') {\n  terminal = 'technical_dns';\n}\n\nreturn [{\n  json: {\n    ...n,\n    domain_verification_status: status,\n    domain_verification_reason: reason,\n    _terminal: terminal\n  }\n}];\n"
+      },
+      "name": "Interpret DNS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        512
+      ],
+      "id": "0cbb0d8e-1aa4-4d8e-a385-9f4c5541f1e0"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.domain_verification_status }}",
+                    "rightValue": "INVALID_DOMAIN",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "9f629fc6-680a-4bc3-8a69-242005361691"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "f4ee352e-e989-43af-8c7d-4392d23e7350",
+                    "leftValue": "={{ $json.domain_verification_status }}",
+                    "rightValue": "TECHNICAL_ERROR",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "1bebede7-3430-49a1-b850-d3a62bab2e26",
+                    "leftValue": "={{ $json.domain_verification_status }}",
+                    "rightValue": "MAIL_DOMAIN_VERIFIED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 2
+        }
+      },
+      "name": "DNS Terminal?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        224,
+        272
+      ],
+      "id": "50884017-bd08-453c-8e80-53e0f167ffac"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nlet recordId = '';\n\nif (item.recordId) {\n  recordId = String(item.recordId).trim();\n} else if (item.airtable_record_id) {\n  recordId = String(item.airtable_record_id).trim();\n}\n\nif (!recordId) {\n  throw new Error(\n    'Pack Invalid Domain: recordId is missing. Input: ' +\n    JSON.stringify(item)\n  );\n}\n\nconst url =\n  'https://api.airtable.com/v0/appn5d5Ca7g9IyNMf/tblnUG3bEN2QqyKT4/' +\n  recordId;\n\nreturn [\n  {\n    json: {\n      method: 'PATCH',\n      url: url,\n      body: {\n        fields: {\n          'Enrichment Status': 'invalid_domain',\n          'Result Status': 'invalid',\n          'Routing Outcome': 'INVALID_DOMAIN'\n        }\n      }\n    }\n  }\n];"
+      },
+      "name": "Pack Invalid Domain",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        160
+      ],
+      "id": "7d88098a-6b9f-484e-98a2-0837504ae8df"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "aNAdZLwDzBb7oHe5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/aNAdZLwDzBb7oHe5",
+          "cachedResultName": "Airtable Request Retry (transient-only)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "Write invalid_domain (retry)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "b0e73c0e-43db-412f-be83-c825c343a13f"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nlet recordId = '';\n\nif (item.recordId) {\n  recordId = String(item.recordId).trim();\n} else if (item.airtable_record_id) {\n  recordId = String(item.airtable_record_id).trim();\n}\n\nif (!recordId) {\n  throw new Error(\n    'Pack DNS Technical: recordId is missing. Input: ' +\n    JSON.stringify(item)\n  );\n}\n\nconst url =\n  'https://api.airtable.com/v0/appn5d5Ca7g9IyNMf/tblnUG3bEN2QqyKT4/' +\n  recordId;\n\nreturn [\n  {\n    json: {\n      method: 'PATCH',\n      url: url,\n      body: {\n        fields: {\n          'Enrichment Status': 'failed',\n          'Result Status': 'failed',\n          'Routing Outcome': 'FAILED'\n        }\n      }\n    }\n  }\n];"
+      },
+      "name": "Pack DNS Technical",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        352
+      ],
+      "id": "6a382db5-8e72-47e9-a1d5-b15c3e2f96f3"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "aNAdZLwDzBb7oHe5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/aNAdZLwDzBb7oHe5",
+          "cachedResultName": "Airtable Request Retry (transient-only)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "Write failed (retry)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        368
+      ],
+      "id": "9e5a5621-ff5d-4d6d-80e2-3a6953a7afc3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json;\n\nreturn [{\n  json: {\n    airtable_record_id: s.recordId,\n    run_id: s.run_id,\n    processing_started_at: s.processing_started_at,\n\n    input: {\n      first_name: s.input.first_name,\n      last_name: s.input.last_name,\n    },\n\n    email: s.email,\n    email_domain: s.email_domain,\n    email_local: s.email_local,\n\n    domain_status: s.domain_status,\n    is_personal_domain: s.is_personal_domain,\n    is_role_inbox: s.is_role_inbox,\n    is_system_inbox: s.is_system_inbox,\n\n    name_quality: s.name_quality,\n    name_quality_reason: s.name_quality_reason,\n    supplied_name: s.supplied_name,\n\n    domain_verification_status: s.domain_verification_status,\n    domain_verification_reason: s.domain_verification_reason,\n\n    enrichment_status: \"processing\",\n    result_status: \"pending\",\n    manual_review: false,\n    manual_review_reason: null,\n    routing_outcome: null\n  }\n}];\n"
+      },
+      "name": "Continue Contract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        528
+      ],
+      "id": "b881485f-b79b-43e2-ab67-85cebf01587d"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "33c7d54c-7e23-446d-b0fd-004320a0af6c",
+              "leftValue": "={{ $json.response.fields[\"Is System Inbox\"] }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -272,
+        -64
+      ],
+      "id": "0b62e9ea-8fe8-4739-bb98-484e270431b6",
+      "name": "System Inbox?"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ZdrCHsGNoa919PTU",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ZdrCHsGNoa919PTU",
+          "cachedResultName": "Slice 2 — Parent Core Orchestrator"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        528
+      ],
+      "id": "8935c1d4-e41c-474d-8a30-c3aa6db469af",
+      "name": "Call 'Slice 2 — Parent Core Orchestrator'"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Airtable Trigger": {
+      "main": [
+        [
+          {
+            "node": "Pack Load",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pack Load": {
+      "main": [
+        [
+          {
+            "node": "Load Lead (retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Lead (retry)": {
+      "main": [
+        [
+          {
+            "node": "Idempotency Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Idempotency Guard": {
+      "main": [
+        [
+          {
+            "node": "Proceed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proceed?": {
+      "main": [
+        [
+          {
+            "node": "Pack SetProcessing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No-Op duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pack SetProcessing": {
+      "main": [
+        [
+          {
+            "node": "Set Processing + Reset (retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Processing + Reset (retry)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Validate": {
+      "main": [
+        [
+          {
+            "node": "System Inbox?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pack Privacy": {
+      "main": [
+        [
+          {
+            "node": "Write privacy_stop (retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pack Invalid": {
+      "main": [
+        [
+          {
+            "node": "Write invalid_input (retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Root Divergent": {
+      "main": [
+        [
+          {
+            "node": "Verify Pack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Pack": {
+      "main": [
+        [
+          {
+            "node": "Verify Mail Domain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Mail Domain": {
+      "main": [
+        [
+          {
+            "node": "Interpret DNS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpret DNS": {
+      "main": [
+        [
+          {
+            "node": "DNS Terminal?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pack Invalid Domain": {
+      "main": [
+        [
+          {
+            "node": "Write invalid_domain (retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pack DNS Technical": {
+      "main": [
+        [
+          {
+            "node": "Write failed (retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Domain Status": {
+      "main": [
+        [
+          {
+            "node": "Pack Privacy",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pack Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Root Divergent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "System Inbox?": {
+      "main": [
+        [
+          {
+            "node": "Pack Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Domain Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DNS Terminal?": {
+      "main": [
+        [
+          {
+            "node": "Pack Invalid Domain",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pack DNS Technical",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Continue Contract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write failed (retry)": {
+      "main": [
+        []
+      ]
+    },
+    "Continue Contract": {
+      "main": [
+        [
+          {
+            "node": "Call 'Slice 2 — Parent Core Orchestrator'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "de143df5-c9de-4bb8-9ffd-f8152aafdd63",
+  "meta": {
+    "instanceId": "103be981e8db8e32f88742df1e25a9d1be5dab7bb54ee11dc0f02d3c1876b528"
+  },
+  "nodeGroups": [],
+  "id": "DTQKPc0u3NkMtcwn",
+  "tags": []
+}

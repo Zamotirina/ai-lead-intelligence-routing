@@ -1,0 +1,406 @@
+{
+  "name": "2E Provider — Apollo Hydration v1 (LIVE)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "4a608dbb-3db3-4472-83b0-6c8420437a6f",
+      "name": "2E Hydration - Entry",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1920,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\n\nfunction fail(detail) {\n  return [{ json: { ...s, _2e_fail: { code: 'INTERNAL_CONTRACT_ERROR', detail } } }];\n}\n\nif (s._2e_fail) return [{ json: s }];\nif (!Array.isArray(s._2e_hydration_plan)) return fail('_2e_hydration_plan missing at live hydration provider entry');\n\nconst endpoint = s._2e_endpoints && s._2e_endpoints.HYDRATION;\nif (typeof endpoint !== 'string' || !endpoint.trim()) return fail('_2e_endpoints.HYDRATION missing at live hydration provider entry');\n\nconst configured = s.l2e_config && s.l2e_config.hydration_endpoint_identity;\nif (typeof configured === 'string' && configured.trim() && configured.trim() !== endpoint.trim()) {\n  return fail('HYDRATION endpoint identity changed after Layer 2E entry');\n}\n\nconst APOLLO_ENDPOINT = 'https://api.apollo.io/api/v1/people/match';\nif (endpoint.trim() !== APOLLO_ENDPOINT) {\n  return fail('live Apollo hydration requires hydration_endpoint_identity=' + APOLLO_ENDPOINT);\n}\n\nconst maxPool = s._2e && s._2e.MAX_VERIFICATION_POOL;\nif (!Number.isInteger(maxPool) || maxPool <= 0) return fail('_2e.MAX_VERIFICATION_POOL missing or invalid');\n\nconst queue = s._2e_hydration_plan\n  .filter(p => p && p.required === true)\n  .slice()\n  .sort((a,b) => a.discovery_rank - b.discovery_rank);\n\nif (queue.length > maxPool) return fail('hydration call count exceeds MAX_VERIFICATION_POOL');\n\nconst seenRanks = new Set();\nconst seenKeys = new Set();\nfor (const p of queue) {\n  if (!Number.isInteger(p.discovery_rank) || p.discovery_rank < 1) return fail('invalid hydration discovery_rank');\n  if (seenRanks.has(p.discovery_rank)) return fail('duplicate hydration discovery_rank: ' + p.discovery_rank);\n  seenRanks.add(p.discovery_rank);\n\n  if (typeof p.stable_candidate_key !== 'string' || !p.stable_candidate_key.trim()) return fail('hydration candidate missing stable_candidate_key');\n  if (seenKeys.has(p.stable_candidate_key)) return fail('duplicate hydration stable_candidate_key: ' + p.stable_candidate_key);\n  seenKeys.add(p.stable_candidate_key);\n\n  const a = p.anchor || {};\n  const r = p.request || {};\n  if (a.provider_namespace !== 'apollo' || typeof a.person_id !== 'string' || !a.person_id.trim()) {\n    return fail('invalid Apollo hydration anchor for ' + p.stable_candidate_key);\n  }\n  if (r.provider_namespace !== a.provider_namespace || r.person_id !== a.person_id) {\n    return fail('pre-call hydration identity binding mismatch for ' + p.stable_candidate_key);\n  }\n}\n\nconst clean = { ...s };\ndelete clean._2e_hydration_fixture;\n\nreturn [{\n  json: {\n    ...clean,\n    _hyd_live: {\n      endpoint_identity: endpoint.trim(),\n      queue,\n      cursor: 0,\n      logical_call_count: 0,\n      results: [],\n      events: [],\n      service_state: {\n        state: 'AVAILABLE',\n        breaker_key: endpoint.trim(),\n        last_logical_call_index: null,\n        consecutive_transient_exhaustions: 0\n      },\n      current: null,\n      attempt_result: null,\n      retry_delay_ms: null\n    }\n  }\n}];"
+      },
+      "id": "4624c4d8-e24a-4dc8-9216-ee028a240104",
+      "name": "2E Hydration - Init Live State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1680,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json._hyd_live && $json._hyd_live.cursor < $json._hyd_live.queue.length && $json._hyd_live.service_state.state === \"AVAILABLE\" }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "38a520d5-c708-470c-a1e1-45fbe2eeaadc",
+      "name": "2E Hydration - Has Next Candidate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1440,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\nif (s._2e_fail) return [{ json: s }];\nconst live = s._hyd_live;\nif (!live || !Array.isArray(live.queue)) return [{ json: { ...s, _2e_fail: { code:'INTERNAL_CONTRACT_ERROR', detail:'missing _hyd_live queue' } } }];\nif (live.service_state.state !== 'AVAILABLE') return [{ json: s }];\nif (live.cursor >= live.queue.length) return [{ json: s }];\n\nconst p = live.queue[live.cursor];\nconst lci = live.logical_call_count + 1;\nreturn [{\n  json: {\n    ...s,\n    _hyd_live: {\n      ...live,\n      logical_call_count: lci,\n      current: {\n        stable_candidate_key: p.stable_candidate_key,\n        discovery_rank: p.discovery_rank,\n        anchor: p.anchor,\n        request: p.request,\n        logical_call_index: lci,\n        attempt: 1\n      },\n      attempt_result: null,\n      retry_delay_ms: null\n    }\n  }\n}];"
+      },
+      "id": "8ecb95c8-f1a4-41f8-9393-c90995ab4619",
+      "name": "2E Hydration - Begin Logical Call",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\nif (s._2e_fail) return [{ json: s }];\nconst c = s._hyd_live && s._hyd_live.current;\nif (!c || !c.request || c.request.provider_namespace !== 'apollo' || typeof c.request.person_id !== 'string' || !c.request.person_id) {\n  return [{ json: { ...s, _2e_fail: { code:'INTERNAL_CONTRACT_ERROR', detail:'invalid current hydration request before HTTP call' } } }];\n}\nif (c.request.person_id !== (c.anchor && c.anchor.person_id)) {\n  return [{ json: { ...s, _2e_fail: { code:'INTERNAL_CONTRACT_ERROR', detail:'hydration requested Person ID differs from anchor immediately before call' } } }];\n}\nreturn [{ json: s }];"
+      },
+      "id": "fc359c1b-3f82-4cb5-9888-b776dcbd3a19",
+      "name": "2E Hydration - Prepare HTTP Attempt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.apollo.io/api/v1/people/match?id={{ encodeURIComponent($json._hyd_live.current.request.person_id) }}&run_waterfall_email=false&run_waterfall_phone=false&reveal_personal_emails=false&reveal_phone_number=false&poll_only=false",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $vars.APOLLO_API_KEY }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "b2bd14f4-ab95-42d0-82bf-3179d8795587",
+      "name": "2E Hydration - Apollo People Match",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -720,
+        128
+      ],
+      "retryOnFail": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $input.first().json || {};\nlet s;\ntry { s = $('2E Hydration - Prepare HTTP Attempt').item.json || {}; }\ncatch (e) { s = {}; }\nif (s._2e_fail) return [{ json: s }];\nconst live = s._hyd_live || {};\nconst c = live.current || {};\nconst attempt = Number(c.attempt || 1);\n\nfunction errText(x) {\n  if (x === null || x === undefined) return '';\n  if (typeof x === 'string') return x;\n  try { return JSON.stringify(x); } catch (e) { return String(x); }\n}\nfunction statusCodeOf(o) {\n  const vals = [o.statusCode, o.status_code, o.http_status, o.error && o.error.statusCode, o.error && o.error.status];\n  for (const v of vals) {\n    const n = Number(v);\n    if (Number.isInteger(n) && n >= 100 && n <= 599) return n;\n  }\n  const m = errText(o.error || o.message || '').match(/\\b([1-5]\\d{2})\\b/);\n  return m ? Number(m[1]) : null;\n}\nfunction safeLinkedIn(u) {\n  if (typeof u !== 'string') return null;\n  let x = u.trim();\n  if (!x) return null;\n  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\\/\\//.test(x)) x = 'https://' + x;\n  const m = x.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:\\/\\/([^\\/?#]*)([^?#]*)/);\n  if (!m) return null;\n  let host = m[1].toLowerCase();\n  if (host.includes('@')) return null;\n  host = host.replace(/:\\d+$/, '').replace(/^www\\./, '');\n  let path = (m[2] || '').toLowerCase();\n  if (path.length > 1 && path.endsWith('/')) path = path.slice(0,-1);\n  if (host !== 'linkedin.com' || !/^\\/in\\/[^\\/]+$/.test(path)) return null;\n  return host + path;\n}\n\nconst http = statusCodeOf(incoming);\nconst nodeError = incoming.error ? errText(incoming.error).toLowerCase() : '';\nlet transient = false;\nlet retry = false;\nlet exhausted = false;\nlet fixture_status = null;\nlet failure_scope = null;\nlet normalized_error_class = null;\nlet returned_person_id = null;\nlet linkedin_url = null;\nlet outcome = null;\nlet error_code = null;\n\nif (incoming.error && http === null) {\n  transient = true;\n  normalized_error_class = /timeout|timed out|etimedout/.test(nodeError) ? 'TIMEOUT' : 'NETWORK_ERROR';\n  error_code = normalized_error_class;\n} else if (http === 408 || http === 425 || http === 429 || (http !== null && http >= 500 && http <= 599)) {\n  transient = true;\n  normalized_error_class = 'HTTP_TRANSIENT_' + http;\n  error_code = normalized_error_class;\n} else if (http === 401 || http === 403) {\n  fixture_status = 'PERMANENT_ERROR';\n  failure_scope = 'SYSTEMIC';\n  normalized_error_class = 'HTTP_' + http;\n  error_code = normalized_error_class;\n  outcome = { kind:'systemic', normalized_error_class };\n} else if (http !== null && (http < 200 || http >= 300)) {\n  fixture_status = 'PERMANENT_ERROR';\n  failure_scope = 'CANDIDATE';\n  normalized_error_class = 'HTTP_' + http;\n  error_code = normalized_error_class;\n  outcome = { kind:'permanent' };\n} else {\n  const body = incoming.body !== undefined ? incoming.body : incoming;\n  let person = null;\n  let explicitNull = false;\n  if (body && Object.prototype.hasOwnProperty.call(body,'person')) {\n    explicitNull = body.person === null;\n    if (body.person && typeof body.person === 'object') person = body.person;\n  } else if (body && body.data && Object.prototype.hasOwnProperty.call(body.data,'person')) {\n    explicitNull = body.data.person === null;\n    if (body.data.person && typeof body.data.person === 'object') person = body.data.person;\n  } else if (body && typeof body === 'object' && !Array.isArray(body) && (body.id || body.linkedin_url)) {\n    person = body;\n  }\n\n  if (explicitNull) {\n    fixture_status = 'NOT_FOUND';\n    outcome = { kind:'ok' };\n  } else if (!person) {\n    fixture_status = 'INVALID_RESPONSE';\n    failure_scope = 'SYSTEMIC';\n    normalized_error_class = 'INVALID_SHARED_ENVELOPE';\n    error_code = normalized_error_class;\n    outcome = { kind:'systemic', normalized_error_class };\n  } else if (typeof person.id !== 'string' || !person.id.trim()) {\n    fixture_status = 'INVALID_RESPONSE';\n    failure_scope = 'CANDIDATE';\n    normalized_error_class = 'MISSING_RETURNED_PERSON_ID';\n    error_code = normalized_error_class;\n    outcome = { kind:'permanent' };\n  } else {\n    fixture_status = 'MATCH';\n    returned_person_id = person.id.trim();\n    linkedin_url = safeLinkedIn(person.linkedin_url);\n    outcome = { kind:'ok' };\n  }\n}\n\nif (transient) {\n  retry = attempt < 3;\n  exhausted = attempt >= 3;\n  outcome = null;\n}\n\nconst retryDelay = retry ? (attempt === 1 ? 2000 : 5000) : null;\n\nreturn [{\n  json: {\n    ...s,\n    _hyd_live: {\n      ...live,\n      attempt_result: {\n        retry,\n        exhausted,\n        fixture_status,\n        failure_scope,\n        normalized_error_class,\n        returned_person_id,\n        linkedin_url,\n        outcome,\n        http_status: http,\n        error_code\n      },\n      retry_delay_ms: retryDelay\n    }\n  }\n}];"
+      },
+      "id": "3998dafe-6122-4fd6-8592-16ef36a2775f",
+      "name": "2E Hydration - Classify Attempt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json._hyd_live && $json._hyd_live.attempt_result && $json._hyd_live.attempt_result.retry === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "57a0cfa1-e6ac-4797-8b79-5c8d5f018107",
+      "name": "2E Hydration - Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\nif (s._2e_fail) return [{ json:s }];\nconst live=s._hyd_live||{};\nconst c=live.current||{};\nif (!live.attempt_result || live.attempt_result.retry !== true) {\n  return [{ json:{...s,_2e_fail:{code:'INTERNAL_CONTRACT_ERROR',detail:'retry advance reached without retry=true'}} }];\n}\nconst nextAttempt=Number(c.attempt||1)+1;\nif (nextAttempt>3) return [{ json:{...s,_2e_fail:{code:'INTERNAL_CONTRACT_ERROR',detail:'hydration retry exceeded 3 attempts'}} }];\nreturn [{json:{...s,_hyd_live:{...live,current:{...c,attempt:nextAttempt},attempt_result:null}}}];"
+      },
+      "id": "4a9ed336-c28a-428a-8764-c2bb503b50f3",
+      "name": "2E Hydration - Advance Retry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json._hyd_live.retry_delay_ms / 1000 }}"
+      },
+      "id": "94f4fc4f-d724-4a3a-a2db-8b8fdb71497b",
+      "name": "2E Hydration - Retry Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        0
+      ],
+      "webhookId": "aecaf093-ee72-404d-9430-95dc8f24505d"
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\nif (s._2e_fail) return [{ json:s }];\nconst live=s._hyd_live||{};\nconst c=live.current||{};\nconst ar=live.attempt_result||{};\nif (!c.stable_candidate_key || !Number.isInteger(c.logical_call_index)) {\n  return [{json:{...s,_2e_fail:{code:'INTERNAL_CONTRACT_ERROR',detail:'commit missing active hydration logical call'}}}];\n}\nif (ar.retry === true) return [{json:{...s,_2e_fail:{code:'INTERNAL_CONTRACT_ERROR',detail:'commit reached while hydration retry still required'}}}];\n\nlet state=live.service_state && live.service_state.state || 'AVAILABLE';\nlet streak=Number(live.service_state && live.service_state.consecutive_transient_exhaustions || 0);\nlet lastIdx=live.service_state && live.service_state.last_logical_call_index || null;\nconst events=Array.isArray(live.events)?live.events.slice():[];\nconst results=Array.isArray(live.results)?live.results.slice():[];\nconst endpoint=live.endpoint_identity;\nconst lci=c.logical_call_index;\nconst occurredAt=s._2e_now || new Date().toISOString();\n\nif (ar.exhausted === true) {\n  streak += 1;\n  lastIdx = lci;\n  if (streak >= 2) {\n    events.push({\n      operation:'HYDRATION',\n      service_endpoint_identity:endpoint,\n      previous_state:'AVAILABLE',\n      new_state:'CIRCUIT_OPEN',\n      trigger_stable_candidate_key:c.stable_candidate_key,\n      logical_call_index:lci,\n      normalized_error_class:'TRANSIENT_EXHAUSTED',\n      attempts:Number(c.attempt||3),\n      http_status:ar.http_status ?? null,\n      error_code:ar.error_code ?? null,\n      occurred_at:occurredAt\n    });\n    state='CIRCUIT_OPEN';\n    streak=2;\n  }\n} else if (ar.outcome && ar.outcome.kind === 'systemic') {\n  streak=0;\n  lastIdx=lci;\n  state='OPEN_FAILED';\n  events.push({\n    operation:'HYDRATION',\n    service_endpoint_identity:endpoint,\n    previous_state:'AVAILABLE',\n    new_state:'OPEN_FAILED',\n    trigger_stable_candidate_key:c.stable_candidate_key,\n    logical_call_index:lci,\n    normalized_error_class:ar.normalized_error_class || 'SYSTEMIC_FAILURE',\n    attempts:Number(c.attempt||1),\n    http_status:ar.http_status ?? null,\n    error_code:ar.error_code ?? null,\n    occurred_at:occurredAt\n  });\n} else {\n  streak=0;\n  lastIdx=lci;\n}\n\nresults.push({\n  stable_candidate_key:c.stable_candidate_key,\n  discovery_rank:c.discovery_rank,\n  called:true,\n  anchor:c.anchor,\n  request:c.request,\n  logical_call_index:lci,\n  attempt_count:Number(c.attempt||1),\n  exhausted:ar.exhausted===true,\n  outcome:ar.outcome||null,\n  fixture_status:ar.fixture_status||null,\n  failure_scope:ar.failure_scope||null,\n  normalized_error_class:ar.normalized_error_class||null,\n  returned_person_id:ar.returned_person_id||null,\n  linkedin_url:ar.linkedin_url||null,\n  http_status:ar.http_status ?? null,\n  error_code:ar.error_code ?? null,\n  service_state_after:state\n});\n\nlet cursor=live.cursor+1;\nif (state !== 'AVAILABLE') {\n  while (cursor < live.queue.length) {\n    const p=live.queue[cursor];\n    results.push({\n      stable_candidate_key:p.stable_candidate_key,\n      discovery_rank:p.discovery_rank,\n      called:false,\n      anchor:p.anchor,\n      request:p.request,\n      logical_call_index:null,\n      blocked_by_breaker_state:state\n    });\n    cursor += 1;\n  }\n}\n\nreturn [{json:{\n  ...s,\n  _hyd_live:{\n    ...live,\n    cursor,\n    results,\n    events,\n    current:null,\n    attempt_result:null,\n    retry_delay_ms:null,\n    service_state:{\n      state,\n      breaker_key:endpoint,\n      last_logical_call_index:lastIdx,\n      consecutive_transient_exhaustions:state==='OPEN_FAILED'?0:(state==='CIRCUIT_OPEN'?2:streak)\n    }\n  }\n}}];"
+      },
+      "id": "4c7f4597-9b37-48ac-91ef-73de1f5d16aa",
+      "name": "2E Hydration - Commit Logical Call",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json || {};\nif (s._2e_fail) return [{ json:s }];\nconst live=s._hyd_live;\nif (!live || !Array.isArray(live.results) || !live.service_state) {\n  return [{json:{...s,_2e_fail:{code:'INTERNAL_CONTRACT_ERROR',detail:'live hydration state missing at finalize'}}}];\n}\nif (live.cursor !== live.queue.length) {\n  return [{json:{...s,_2e_fail:{code:'INTERNAL_CONTRACT_ERROR',detail:'live hydration finalized before queue exhaustion'}}}];\n}\nconst out={...s};\ndelete out._hyd_live;\ndelete out._2e_hydration_fixture;\nout._2e_hydration_raw=live.results;\nout._2e_hydration_service={...live.service_state};\nout._2e_circuit_events=(Array.isArray(s._2e_circuit_events)?s._2e_circuit_events:[]).concat(live.events||[]);\nreturn [{json:out}];"
+      },
+      "id": "6d3f1f28-9380-40e4-8f90-3d2ef73a1608",
+      "name": "2E Hydration - Finalize Provider Envelope",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        400
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "38041a5f-25fd-4acd-93e5-7cc966382670",
+      "name": "2E Hydration - Output",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -960,
+        400
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2E Hydration - Entry": {
+      "main": [
+        [
+          {
+            "node": "2E Hydration - Init Live State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Hydration - Init Live State": {
+      "main": [
+        [
+          {
+            "node": "2E Hydration - Has Next Candidate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Hydration - Has Next Candidate?": {
+      "main": [
+        [
+          {
+            "node": "2E Hydration - Begin Logical Call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2E Hydration - Finalize Provider Envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Hydration - Begin Logical Call": {
+      "main": [
+        [
+          {
+            "node": "2E Hydration - Prepare HTTP Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Hydration - Prepare HTTP Attempt": {
+      "main": [
+        [
+          {
+            "node": "2E Hydration - Apollo People Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Hydration - Apollo People Match": {
+      "main": [
+        [
+          {
+            "node": "2E Hydration - Classify Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Hydration - Classify Attempt": {
+      "main": [
+        [
+          {
+            "node": "2E Hydration - Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Hydration - Retry?": {
+      "main": [
+        [
+          {
+            "node": "2E Hydration - Advance Retry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2E Hydration - Commit Logical Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Hydration - Advance Retry": {
+      "main": [
+        [
+          {
+            "node": "2E Hydration - Retry Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Hydration - Retry Wait": {
+      "main": [
+        [
+          {
+            "node": "2E Hydration - Prepare HTTP Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Hydration - Commit Logical Call": {
+      "main": [
+        [
+          {
+            "node": "2E Hydration - Has Next Candidate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2E Hydration - Finalize Provider Envelope": {
+      "main": [
+        [
+          {
+            "node": "2E Hydration - Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f70baa8c-709e-4016-8963-3981ae4b53b3",
+  "meta": {
+    "instanceId": "103be981e8db8e32f88742df1e25a9d1be5dab7bb54ee11dc0f02d3c1876b528"
+  },
+  "nodeGroups": [],
+  "id": "MGu94I9SWEGyP6Aj",
+  "tags": []
+}

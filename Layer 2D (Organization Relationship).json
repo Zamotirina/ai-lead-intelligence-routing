@@ -1,0 +1,1383 @@
+{
+  "name": "Layer 2D (Organization Relationship)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "name": "2D - Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -3520,
+        128
+      ],
+      "id": "56b06a31-f0d0-4468-9d34-719e58697b56"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction ndom(d){ if(d==null||d==='') return ''; return String(d).trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction orgApolloId(o){ const pr=(o&&o.provider_refs)||{}; return (pr.apollo_organization_id?String(pr.apollo_organization_id).trim():null)||null; }\nfunction validRfc3339(t){ if(t==null||t==='') return false; const m=String(t).trim().match(/^(\\d{4})-(\\d{2})-(\\d{2})[Tt ](\\d{2}):(\\d{2})(?::(\\d{2}))?(?:\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})$/); if(!m) return false; const y=+m[1], mo=+m[2], d=+m[3], h=+m[4], mi=+m[5], sec=+(m[6]||0); if(mo<1||mo>12) return false; if(h>23||mi>59||sec>59) return false; const leap=(y%4===0 && (y%100!==0 || y%400===0)); const dim=[31, leap?29:28, 31,30,31,30,31,31,30,31,30,31]; if(d<1||d>dim[mo-1]) return false; const off=m[7]; if(off!=='Z'){ const o=off.replace(':',''); const oh=+o.slice(1,3), om=+o.slice(3,5); if(oh>23||om>59) return false; } return true; }\nconst REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED','UNKNOWN'];\nconst EVID_REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED'];\nconst EVID_STATUS = ['OK','NO_EVIDENCE','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst VERIF_STATUS = ['DECISION','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst QUALS = ['STRONG','MODERATE','REJECT'];\nconst VALIDITIES = ['CURRENT','HISTORICAL','UNKNOWN'];\n\nconst s=$input.first().json||{}; const p=[];\nif(s.account_company===null||s.account_company===undefined) p.push('account_company');\nif(s.matched_employer===null||s.matched_employer===undefined) p.push('matched_employer');\nif(!(s.inbound_employer_verification && s.inbound_employer_verification.status==='VERIFIED')) p.push('inbound_employer_verification');\nif(s.organization_relationship!==null&&s.organization_relationship!==undefined) p.push('organization_relationship_stale');\nif(s.enrichment_status!=='processing') p.push('enrichment_status');\nif(s.result_status!=='pending') p.push('result_status');\nif(s.routing_outcome!==null&&s.routing_outcome!==undefined) p.push('routing_outcome');\nreturn [{json:{...s, gate_ok: p.length===0, _2d_problems:p}}];\n"
+      },
+      "name": "2D - Input Contract Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3296,
+        128
+      ],
+      "id": "6a4d8d25-c56e-46c3-922e-31ca70524090"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.gate_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "2D - Gate Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -3088,
+        128
+      ],
+      "id": "ec961274-99b2-4f37-9b44-40e19c0747e2"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{};\nreturn [{json:{...s, _2d_fail_reason:'INTERNAL_CONTRACT_ERROR'}}];\n"
+      },
+      "name": "2D - Build Failed Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3088,
+        320
+      ],
+      "id": "6845f4c8-e2b4-43c5-89f4-2ba397fac003"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction ndom(d){ if(d==null||d==='') return ''; return String(d).trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction orgApolloId(o){ const pr=(o&&o.provider_refs)||{}; return (pr.apollo_organization_id?String(pr.apollo_organization_id).trim():null)||null; }\nfunction validRfc3339(t){ if(t==null||t==='') return false; const m=String(t).trim().match(/^(\\d{4})-(\\d{2})-(\\d{2})[Tt ](\\d{2}):(\\d{2})(?::(\\d{2}))?(?:\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})$/); if(!m) return false; const y=+m[1], mo=+m[2], d=+m[3], h=+m[4], mi=+m[5], sec=+(m[6]||0); if(mo<1||mo>12) return false; if(h>23||mi>59||sec>59) return false; const leap=(y%4===0 && (y%100!==0 || y%400===0)); const dim=[31, leap?29:28, 31,30,31,30,31,31,30,31,30,31]; if(d<1||d>dim[mo-1]) return false; const off=m[7]; if(off!=='Z'){ const o=off.replace(':',''); const oh=+o.slice(1,3), om=+o.slice(3,5); if(oh>23||om>59) return false; } return true; }\nconst REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED','UNKNOWN'];\nconst EVID_REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED'];\nconst EVID_STATUS = ['OK','NO_EVIDENCE','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst VERIF_STATUS = ['DECISION','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst QUALS = ['STRONG','MODERATE','REJECT'];\nconst VALIDITIES = ['CURRENT','HISTORICAL','UNKNOWN'];\n\nconst s=$input.first().json||{};\nconst a=s.account_company||{}, e=s.matched_employer||{};\nconst aId=orgApolloId(a), eId=orgApolloId(e);\nconst aDom=ndom(a.domain)||null, eDom=ndom(e.domain)||null;\nconst aLi=nurl(a.linkedin_url)||null, eLi=nurl(e.linkedin_url)||null;\nlet gate, conflict=null;\nconst supporting=[];\nif(aDom&&eDom&&aDom!==eDom) supporting.push('DOMAIN_CONFLICT');\nif(aLi&&eLi&&aLi!==eLi) supporting.push('LINKEDIN_CONFLICT');\nif(aId&&eId&&aId===eId){ gate='SAME_ENTITY'; }\nelse if(aId&&eId&&aId!==eId){ gate='EVIDENCE_NEEDED'; conflict='STRONG_ID_CONFLICT'; }\nelse if((aDom&&eDom&&aDom!==eDom)||(aLi&&eLi&&aLi!==eLi)){ gate='EVIDENCE_NEEDED'; conflict='STRONG_IDENTIFIER_CONFLICT'; }\nelse if((aDom&&aDom===eDom)||(aLi&&aLi===eLi)){ gate='SAME_ENTITY'; }\nelse if(e.identity_binding==='OBSERVED_LABEL_ONLY'){ gate='OBSERVED_LABEL_ONLY'; }\nelse { gate='EVIDENCE_NEEDED'; }\nreturn [{json:{...s, _2d_gate:gate, _2d_id_conflict:conflict, _2d_id_gate:{aId, eId, aDom, eDom, aLi, eLi, conflict, supporting_conflicts:supporting}}}];\n"
+      },
+      "name": "2D - Identity Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2864,
+        128
+      ],
+      "id": "5bb72406-2f66-4f76-bd9a-f5f45180ea22"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2d_gate }}",
+                    "rightValue": "SAME_ENTITY",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2d_gate }}",
+                    "rightValue": "OBSERVED_LABEL_ONLY",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2d_gate }}",
+                    "rightValue": "EVIDENCE_NEEDED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": true
+        }
+      },
+      "name": "2D - Identity Gate Decision",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -2640,
+        128
+      ],
+      "id": "2580975a-82f4-46b0-8d69-a99149041c46"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{};\nreturn [{json:{...s, organization_relationship:'SAME_ENTITY', organization_relationship_reason:'identity_gate_auto_same_entity', organization_relationship_source:null,\n  organization_relationship_evidence:{identity_gate:s._2d_id_gate,evidence_items:[],normalized_relationships:['SAME_ENTITY'],conflicts:(s._2d_id_gate&&s._2d_id_gate.supporting_conflicts)?s._2d_id_gate.supporting_conflicts:[],precedence:'identity_gate_step_terminal'},\n  relationship_evidence_result:{status:'NOT_APPLICABLE',retrieved_at:null,evidence_items:[],diagnostics:{http_status:null,attempts:0,error_code:null}},\n  relationship_verifier_result:{status:'NOT_APPLICABLE',relationship:null,reason:'identity_gate_auto_same_entity',source:null,diagnostics:{http_status:null,attempts:0,error_code:null}},\n  manual_review:false, manual_review_reason:null, enrichment_status:'processing', result_status:'pending', routing_outcome:null, _2d_decision:'NONTERMINAL' }}];\n"
+      },
+      "name": "2D - Build Auto Same Entity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2640,
+        288
+      ],
+      "id": "af1a2ffb-9956-445f-9e99-96703148ccc9"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{};\nreturn [{json:{...s, organization_relationship:'UNKNOWN', organization_relationship_reason:'employer_account_relationship_unverified', organization_relationship_source:null,\n  organization_relationship_evidence:{identity_gate:s._2d_id_gate,evidence_items:[],normalized_relationships:[],conflicts:['OBSERVED_LABEL_ONLY'],precedence:'observed_label_only_guard'},\n  relationship_evidence_result:{status:'NOT_APPLICABLE',retrieved_at:null,evidence_items:[],diagnostics:{http_status:null,attempts:0,error_code:null}},\n  relationship_verifier_result:{status:'NOT_APPLICABLE',relationship:null,reason:'observed_label_only_guard',source:null,diagnostics:{http_status:null,attempts:0,error_code:null}},\n  manual_review:true, manual_review_reason:'employer_account_relationship_unverified', enrichment_status:'manual_review', result_status:'manual', routing_outcome:'MANUAL_REVIEW', _2d_decision:'UNKNOWN' }}];\n"
+      },
+      "name": "2D - Build Label Only Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2640,
+        400
+      ],
+      "id": "d4004f50-731f-4ed0-9530-13b317620728"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction ndom(d){ if(d==null||d==='') return ''; return String(d).trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction orgApolloId(o){ const pr=(o&&o.provider_refs)||{}; return (pr.apollo_organization_id?String(pr.apollo_organization_id).trim():null)||null; }\nfunction validRfc3339(t){ if(t==null||t==='') return false; const m=String(t).trim().match(/^(\\d{4})-(\\d{2})-(\\d{2})[Tt ](\\d{2}):(\\d{2})(?::(\\d{2}))?(?:\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})$/); if(!m) return false; const y=+m[1], mo=+m[2], d=+m[3], h=+m[4], mi=+m[5], sec=+(m[6]||0); if(mo<1||mo>12) return false; if(h>23||mi>59||sec>59) return false; const leap=(y%4===0 && (y%100!==0 || y%400===0)); const dim=[31, leap?29:28, 31,30,31,30,31,31,30,31,30,31]; if(d<1||d>dim[mo-1]) return false; const off=m[7]; if(off!=='Z'){ const o=off.replace(':',''); const oh=+o.slice(1,3), om=+o.slice(3,5); if(oh>23||om>59) return false; } return true; }\nconst REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED','UNKNOWN'];\nconst EVID_REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED'];\nconst EVID_STATUS = ['OK','NO_EVIDENCE','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst VERIF_STATUS = ['DECISION','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst QUALS = ['STRONG','MODERATE','REJECT'];\nconst VALIDITIES = ['CURRENT','HISTORICAL','UNKNOWN'];\n\nconst s=$('2D - Identity Gate').first().json||{};\nconst a=s.account_company||{}, e=s.matched_employer||{};\nreturn [{json:{\n  account_company:{name:a.name||null,domain:a.domain||null,linkedin_url:a.linkedin_url||null,provider_refs:a.provider_refs||{}},\n  matched_employer:{name:e.name||null,domain:e.domain||null,linkedin_url:e.linkedin_url||null,provider_refs:e.provider_refs||{},identity_binding:e.identity_binding||null},\n  attempt:1 }}];\n"
+      },
+      "name": "2D - Prepare Evidence Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2416,
+        128
+      ],
+      "id": "a4951ac4-85b0-4160-b9ba-ebd915c368ec"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://runtime.codewords.ai/run/org_relationship_evidence_v162_06ef20da",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "name": "2D - Relationship Evidence Service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2208,
+        128
+      ],
+      "retryOnFail": false,
+      "id": "d39eea6f-b4ba-4661-bbd9-f4bb0d4709c0",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "d1vcVtxbz3WRxi0P",
+          "name": "Header Auth account 3"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst item=$input.first().json||{};\nconst prep=$('2D - Prepare Evidence Request').first().json||{};\n\nconst normalizedServiceStatus =\n  item.status ||\n  item._2d_ev_status ||\n  (item.relationship_evidence_result && item.relationship_evidence_result.status) ||\n  null;\n\nlet statusCode=null; let diagText=''; let thrown=false;\nconst err=item.error;\nif(err&&typeof err==='object'){\n  thrown=true;\n  const maybe = err.statusCode || err.status || ((err.response&&typeof err.response==='object')?(err.response.status||err.response.statusCode):null);\n  if(maybe!==null && maybe!==undefined && maybe!==''){ statusCode=Number(maybe); }\n  const code = String(err.code||'');\n  diagText = (String(err.message||'')+' '+String(err.name||'')+' '+code).toLowerCase();\n} else {\n  const h = item.statusCode\n    || (item.relationship_evidence_result && item.relationship_evidence_result.diagnostics && item.relationship_evidence_result.diagnostics.http_status)\n    || null;\n  if(h!==null && h!==undefined && h!==''){ statusCode=Number(h); }\n}\nconst sc = Number.isFinite(statusCode) ? statusCode : null;\nconst hasHttpStatus = Number.isInteger(sc) && sc>=100 && sc<=599;\n\nlet transient=false;\nif(thrown){\n  if(hasHttpStatus){\n    transient = (sc===408 || sc===429 || (sc>=500 && sc<=599));\n  } else {\n    transient = /timeout|timed out|etimedout|econnreset|econnrefused|econnaborted|network|socket|aborted|unreachable/.test(diagText);\n  }\n} else if(normalizedServiceStatus){\n  transient = (normalizedServiceStatus==='TRANSIENT_ERROR');\n} else if(hasHttpStatus){\n  transient = (sc===408 || sc===429 || (sc>=500 && sc<=599));\n} else {\n  transient = false;\n}\n\nconst attempts = (typeof $runIndex==='number' && $runIndex>=0) ? ($runIndex+1) : (Number(item.attempt)||1);\nconst shouldRetry = transient && (attempts<3);\nconst delayMs = attempts===1 ? 2000 : 5000;\nconst request_status = transient ? 'TRANSIENT_ERROR' : 'PERMANENT_ERROR';\nconst next_attempt = attempts+1;\n\n// Business request: EXCLUSIVELY from the sanitized Prepare node (immutable across retries).\nconst a = prep.account_company || {};\nconst e = prep.matched_employer || {};\nreturn [{json:{\n  account_company:{name:a.name||null,domain:a.domain||null,linkedin_url:a.linkedin_url||null,provider_refs:a.provider_refs||{}},\n  matched_employer:{name:e.name||null,domain:e.domain||null,linkedin_url:e.linkedin_url||null,provider_refs:e.provider_refs||{},identity_binding:e.identity_binding||null},\n  attempt:next_attempt,\n  shouldRetry, attempts, next_attempt, delayMs, request_status, statusCode:sc }}];\n"
+      },
+      "name": "2D - Evidence Retry Classifier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2208,
+        304
+      ],
+      "id": "a2940577-75db-4bc3-858f-8d0c5dca7d51"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.shouldRetry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "2D - Evidence Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        304
+      ],
+      "id": "fff18d6f-668a-4404-992f-7ce4a49e143c"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delayMs / 1000 }}"
+      },
+      "name": "2D - Evidence Retry Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -1760,
+        304
+      ],
+      "id": "ccada99e-2b9a-4f5d-bf5a-01765c1acbdb",
+      "webhookId": "94582439-bd3b-46fc-b1ff-3c34d3d254b2"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst it=$input.first().json||{}; const ig=$('2D - Identity Gate').first().json||{};\nreturn [{json:{...ig, _2d_fail_reason: it.request_status==='TRANSIENT_ERROR'?'PROVIDER_TRANSIENT_FAILURE_EXHAUSTED':'PROVIDER_PERMANENT_FAILURE',\n  relationship_evidence_result:{status:it.request_status||'PERMANENT_ERROR',retrieved_at:null,evidence_items:[],diagnostics:{http_status:it.statusCode||null,attempts:it.attempts||1,error_code:null}},\n  relationship_verifier_result:{status:'NOT_APPLICABLE',relationship:null,reason:null,source:null,diagnostics:{http_status:null,attempts:0,error_code:null}} }}];\n"
+      },
+      "name": "2D - Evidence Error Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        208
+      ],
+      "id": "b65e0eae-7b93-4c8e-a643-7928d358614c"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction ndom(d){ if(d==null||d==='') return ''; return String(d).trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction orgApolloId(o){ const pr=(o&&o.provider_refs)||{}; return (pr.apollo_organization_id?String(pr.apollo_organization_id).trim():null)||null; }\nfunction validRfc3339(t){ if(t==null||t==='') return false; const m=String(t).trim().match(/^(\\d{4})-(\\d{2})-(\\d{2})[Tt ](\\d{2}):(\\d{2})(?::(\\d{2}))?(?:\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})$/); if(!m) return false; const y=+m[1], mo=+m[2], d=+m[3], h=+m[4], mi=+m[5], sec=+(m[6]||0); if(mo<1||mo>12) return false; if(h>23||mi>59||sec>59) return false; const leap=(y%4===0 && (y%100!==0 || y%400===0)); const dim=[31, leap?29:28, 31,30,31,30,31,31,30,31,30,31]; if(d<1||d>dim[mo-1]) return false; const off=m[7]; if(off!=='Z'){ const o=off.replace(':',''); const oh=+o.slice(1,3), om=+o.slice(3,5); if(oh>23||om>59) return false; } return true; }\nconst REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED','UNKNOWN'];\nconst EVID_REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED'];\nconst EVID_STATUS = ['OK','NO_EVIDENCE','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst VERIF_STATUS = ['DECISION','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst QUALS = ['STRONG','MODERATE','REJECT'];\nconst VALIDITIES = ['CURRENT','HISTORICAL','UNKNOWN'];\n\nfunction validEvidenceItem(it){\n  if(!it||typeof it!=='object') return false;\n  if(EVID_REL_ENUM.indexOf(it.relationship)===-1) return false;\n  if(QUALS.indexOf(it.quality)===-1) return false;\n  const sb=(it.subject_binding||{}).entity, ob=(it.object_binding||{}).entity;\n  if(['account_company','matched_employer'].indexOf(sb)===-1) return false;\n  if(['account_company','matched_employer'].indexOf(ob)===-1) return false;\n  if(sb===ob) return false;\n  if(VALIDITIES.indexOf(it.current_validity)===-1) return false;\n  if(typeof it.assertion_text!=='string' && typeof it.normalized_assertion_text!=='string') return false;\n  return true;\n}\nconst raw=$input.first().json||{}; const ig=$('2D - Identity Gate').first().json||{};\nlet status;\nif(EVID_STATUS.indexOf(raw.status)===-1){ status='INVALID_RESPONSE'; } else { status=raw.status; }\nlet retrieved_at=null, items=[], diagnostics=raw.diagnostics||{http_status:null,attempts:1,error_code:null};\nif(status==='OK'){\n  if(!validRfc3339(raw.retrieved_at)) status='INVALID_RESPONSE';\n  else if(!Array.isArray(raw.evidence_items)) status='INVALID_RESPONSE';\n  else if(!raw.evidence_items.every(validEvidenceItem)) status='INVALID_RESPONSE';\n  else { retrieved_at=raw.retrieved_at; items=raw.evidence_items; }\n} else if(status==='NO_EVIDENCE'){\n  if(!validRfc3339(raw.retrieved_at)) status='INVALID_RESPONSE';\n  else if(!Array.isArray(raw.evidence_items) || raw.evidence_items.length!==0) status='INVALID_RESPONSE';\n  else { retrieved_at=raw.retrieved_at; items=[]; }\n} else if(status==='NOT_APPLICABLE'){\n  if((raw.retrieved_at!==null&&raw.retrieved_at!==undefined) || (Array.isArray(raw.evidence_items)&&raw.evidence_items.length>0) || ((raw.diagnostics||{}).attempts>0)) status='INVALID_RESPONSE';\n  else { retrieved_at=null; items=[]; diagnostics={http_status:null,attempts:0,error_code:null}; }\n} else if(status==='TRANSIENT_ERROR'||status==='PERMANENT_ERROR'||status==='INVALID_RESPONSE'){\n  retrieved_at=null; items=[];\n}\nconst evResult={ status:status, retrieved_at:retrieved_at, evidence_items:items, diagnostics:diagnostics };\nreturn [{json:{...ig, relationship_evidence_result:evResult, _2d_ev_status:status, _2d_evidence_raw:raw}}];\n"
+      },
+      "name": "2D - Evidence Adapter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        128
+      ],
+      "id": "1ee1bae3-cdcd-4cfb-971c-680b0ab5d44c"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2d_ev_status }}",
+                    "rightValue": "OK",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2d_ev_status }}",
+                    "rightValue": "NO_EVIDENCE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2d_ev_status }}",
+                    "rightValue": "TRANSIENT_ERROR",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2d_ev_status }}",
+                    "rightValue": "PERMANENT_ERROR",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2d_ev_status }}",
+                    "rightValue": "INVALID_RESPONSE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": true
+        }
+      },
+      "name": "2D - Evidence Status Branch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -1760,
+        128
+      ],
+      "id": "babd0927-5eb4-445c-8a0e-3d9767549dfd"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{};\nconst st=s._2d_ev_status||'INVALID_RESPONSE';\nconst reason = st==='TRANSIENT_ERROR'?'PROVIDER_TRANSIENT_FAILURE_EXHAUSTED':(st==='PERMANENT_ERROR'?'PROVIDER_PERMANENT_FAILURE':'PROVIDER_INVALID_RESPONSE');\nreturn [{json:{...s, _2d_fail_reason:reason}}];\n"
+      },
+      "name": "2D - Evidence Failure Mapping",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1760,
+        304
+      ],
+      "id": "7d834d3c-cd36-48b7-b641-c670de10eb24"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction ndom(d){ if(d==null||d==='') return ''; return String(d).trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction orgApolloId(o){ const pr=(o&&o.provider_refs)||{}; return (pr.apollo_organization_id?String(pr.apollo_organization_id).trim():null)||null; }\nfunction validRfc3339(t){ if(t==null||t==='') return false; const m=String(t).trim().match(/^(\\d{4})-(\\d{2})-(\\d{2})[Tt ](\\d{2}):(\\d{2})(?::(\\d{2}))?(?:\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})$/); if(!m) return false; const y=+m[1], mo=+m[2], d=+m[3], h=+m[4], mi=+m[5], sec=+(m[6]||0); if(mo<1||mo>12) return false; if(h>23||mi>59||sec>59) return false; const leap=(y%4===0 && (y%100!==0 || y%400===0)); const dim=[31, leap?29:28, 31,30,31,30,31,31,30,31,30,31]; if(d<1||d>dim[mo-1]) return false; const off=m[7]; if(off!=='Z'){ const o=off.replace(':',''); const oh=+o.slice(1,3), om=+o.slice(3,5); if(oh>23||om>59) return false; } return true; }\nconst REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED','UNKNOWN'];\nconst EVID_REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED'];\nconst EVID_STATUS = ['OK','NO_EVIDENCE','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst VERIF_STATUS = ['DECISION','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst QUALS = ['STRONG','MODERATE','REJECT'];\nconst VALIDITIES = ['CURRENT','HISTORICAL','UNKNOWN'];\n\nconst us=$('2D - Identity Gate').first().json||{};\nconst ev=$('2D - Evidence Adapter').first().json||{};\nconst a=us.account_company||{}, e=us.matched_employer||{};\nreturn [{json:{\n  account_company:{name:a.name||null,domain:a.domain||null,linkedin_url:a.linkedin_url||null,provider_refs:a.provider_refs||{}},\n  matched_employer_candidate:{name:e.name||null,domain:e.domain||null,linkedin_url:e.linkedin_url||null,provider_refs:e.provider_refs||{},identity_binding:e.identity_binding||null},\n  evidence_items:(ev.relationship_evidence_result&&ev.relationship_evidence_result.evidence_items)?ev.relationship_evidence_result.evidence_items:[],\n  attempt:1 }}];\n"
+      },
+      "name": "2D - Prepare Verifier Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1536,
+        128
+      ],
+      "id": "f637683b-dbe3-486b-a8f5-d998f782bddd"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://runtime.codewords.ai/run/org_relationship_verify_v162_b0ab3a76",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "name": "2D - Relationship Verifier Service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1328,
+        128
+      ],
+      "retryOnFail": false,
+      "id": "f50558b2-a179-4b54-973f-149d25ee10ea",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "d1vcVtxbz3WRxi0P",
+          "name": "Header Auth account 3"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst item=$input.first().json||{};\nconst prep=$('2D - Prepare Verifier Request').first().json||{};\n\nconst normalizedServiceStatus =\n  item.status ||\n  item._2d_vr_status ||\n  (item.relationship_verifier_result && item.relationship_verifier_result.status) ||\n  null;\n\nlet statusCode=null; let diagText=''; let thrown=false;\nconst err=item.error;\nif(err&&typeof err==='object'){\n  thrown=true;\n  const maybe = err.statusCode || err.status || ((err.response&&typeof err.response==='object')?(err.response.status||err.response.statusCode):null);\n  if(maybe!==null && maybe!==undefined && maybe!==''){ statusCode=Number(maybe); }\n  const code = String(err.code||'');\n  diagText = (String(err.message||'')+' '+String(err.name||'')+' '+code).toLowerCase();\n} else {\n  const h = item.statusCode\n    || (item.relationship_verifier_result && item.relationship_verifier_result.diagnostics && item.relationship_verifier_result.diagnostics.http_status)\n    || null;\n  if(h!==null && h!==undefined && h!==''){ statusCode=Number(h); }\n}\nconst sc = Number.isFinite(statusCode) ? statusCode : null;\nconst hasHttpStatus = Number.isInteger(sc) && sc>=100 && sc<=599;\n\nlet transient=false;\nif(thrown){\n  if(hasHttpStatus){\n    transient = (sc===408 || sc===429 || (sc>=500 && sc<=599));\n  } else {\n    transient = /timeout|timed out|etimedout|econnreset|econnrefused|econnaborted|network|socket|aborted|unreachable/.test(diagText);\n  }\n} else if(normalizedServiceStatus){\n  transient = (normalizedServiceStatus==='TRANSIENT_ERROR');\n} else if(hasHttpStatus){\n  transient = (sc===408 || sc===429 || (sc>=500 && sc<=599));\n} else {\n  transient = false;\n}\n\nconst attempts = (typeof $runIndex==='number' && $runIndex>=0) ? ($runIndex+1) : (Number(item.attempt)||1);\nconst shouldRetry = transient && (attempts<3);\nconst delayMs = attempts===1 ? 2000 : 5000;\nconst request_status = transient ? 'TRANSIENT_ERROR' : 'PERMANENT_ERROR';\nconst next_attempt = attempts+1;\n\n// Business request: EXCLUSIVELY from the sanitized Prepare node (immutable across retries).\nconst a = prep.account_company || {};\nconst e = prep.matched_employer_candidate || {};\nconst evItems = Array.isArray(prep.evidence_items) ? prep.evidence_items : [];\nreturn [{json:{\n  account_company:{name:a.name||null,domain:a.domain||null,linkedin_url:a.linkedin_url||null,provider_refs:a.provider_refs||{}},\n  matched_employer_candidate:{name:e.name||null,domain:e.domain||null,linkedin_url:e.linkedin_url||null,provider_refs:e.provider_refs||{},identity_binding:e.identity_binding||null},\n  evidence_items:evItems,\n  attempt:next_attempt,\n  shouldRetry, attempts, next_attempt, delayMs, request_status, statusCode:sc }}];\n"
+      },
+      "name": "2D - Verifier Retry Classifier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        304
+      ],
+      "id": "3c5633a2-dc63-4c4e-9074-87e645a4a89e"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.shouldRetry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "2D - Verifier Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        304
+      ],
+      "id": "a4de55bc-aa4d-4c1e-934b-8291a3994278"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delayMs / 1000 }}"
+      },
+      "name": "2D - Verifier Retry Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -880,
+        304
+      ],
+      "id": "97f7ac26-f855-45d5-ad93-2841e3a999f7",
+      "webhookId": "e26e23af-491d-4a32-b918-fb6960db91cc"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst it=$input.first().json||{}; const ig=$('2D - Identity Gate').first().json||{};\nconst ev=$('2D - Evidence Adapter').first().json||{};\nreturn [{json:{...ig, relationship_evidence_result:(ev.relationship_evidence_result||{status:'NOT_APPLICABLE',retrieved_at:null,evidence_items:[],diagnostics:{http_status:null,attempts:0,error_code:null}}),\n  _2d_fail_reason: it.request_status==='TRANSIENT_ERROR'?'PROVIDER_TRANSIENT_FAILURE_EXHAUSTED':'PROVIDER_PERMANENT_FAILURE',\n  relationship_verifier_result:{status:it.request_status||'PERMANENT_ERROR',relationship:null,reason:null,source:null,diagnostics:{http_status:it.statusCode||null,attempts:it.attempts||1,error_code:null}} }}];\n"
+      },
+      "name": "2D - Verifier Error Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        208
+      ],
+      "id": "20569e4e-b773-4edc-bc0e-95fb8a5e5ce7"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction ndom(d){ if(d==null||d==='') return ''; return String(d).trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction orgApolloId(o){ const pr=(o&&o.provider_refs)||{}; return (pr.apollo_organization_id?String(pr.apollo_organization_id).trim():null)||null; }\nfunction validRfc3339(t){ if(t==null||t==='') return false; const m=String(t).trim().match(/^(\\d{4})-(\\d{2})-(\\d{2})[Tt ](\\d{2}):(\\d{2})(?::(\\d{2}))?(?:\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})$/); if(!m) return false; const y=+m[1], mo=+m[2], d=+m[3], h=+m[4], mi=+m[5], sec=+(m[6]||0); if(mo<1||mo>12) return false; if(h>23||mi>59||sec>59) return false; const leap=(y%4===0 && (y%100!==0 || y%400===0)); const dim=[31, leap?29:28, 31,30,31,30,31,31,30,31,30,31]; if(d<1||d>dim[mo-1]) return false; const off=m[7]; if(off!=='Z'){ const o=off.replace(':',''); const oh=+o.slice(1,3), om=+o.slice(3,5); if(oh>23||om>59) return false; } return true; }\nconst REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED','UNKNOWN'];\nconst EVID_REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED'];\nconst EVID_STATUS = ['OK','NO_EVIDENCE','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst VERIF_STATUS = ['DECISION','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst QUALS = ['STRONG','MODERATE','REJECT'];\nconst VALIDITIES = ['CURRENT','HISTORICAL','UNKNOWN'];\n\nconst raw=$input.first().json||{}; const ig=$('2D - Identity Gate').first().json||{};\nconst ev=$('2D - Evidence Adapter').first().json||{};\nlet status;\nif(VERIF_STATUS.indexOf(raw.status)===-1){ status='INVALID_RESPONSE'; } else { status=raw.status; }\nlet relationship=null, reason=null, source=null, normalized=[], conflicts=[];\nif(status==='DECISION'){\n  if(!raw.relationship || REL_ENUM.indexOf(raw.relationship)===-1){ status='INVALID_RESPONSE'; }\n  else { relationship=raw.relationship; reason=raw.reason||null; source=raw.source||null; normalized=(Array.isArray(raw.normalized_relationships)?raw.normalized_relationships:[]); conflicts=(Array.isArray(raw.conflicts)?raw.conflicts:[]); }\n} else if(status==='NOT_APPLICABLE'){\n  status='INVALID_RESPONSE';\n} else if(status==='TRANSIENT_ERROR'||status==='PERMANENT_ERROR'||status==='INVALID_RESPONSE'){\n  relationship=null;\n}\nconst vr={ status:status, relationship:relationship, reason:reason, source:source, diagnostics:(raw.diagnostics||{http_status:null,attempts:0,error_code:null}) };\nlet out={...ig, relationship_evidence_result:(ev.relationship_evidence_result||null),\n  relationship_verifier_result:vr,\n  organization_relationship:relationship, organization_relationship_reason:reason, organization_relationship_source:source,\n  organization_relationship_evidence:{ identity_gate:ig._2d_id_gate,\n    evidence_items:(ev.relationship_evidence_result?ev.relationship_evidence_result.evidence_items:[]),\n    normalized_relationships:normalized, conflicts:conflicts, precedence:'v1.6.2_verifier' },\n  _2d_vr_status:status };\nif(status==='PERMANENT_ERROR'){ out._2d_fail_reason='PROVIDER_PERMANENT_FAILURE'; }\nelse if(status==='INVALID_RESPONSE'){ out._2d_fail_reason='PROVIDER_INVALID_RESPONSE'; }\nreturn [{json:out}];\n"
+      },
+      "name": "2D - Verifier Adapter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        128
+      ],
+      "id": "d6ebd650-a227-4453-9102-99f66ca45d33"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2d_vr_status }}",
+                    "rightValue": "DECISION",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2d_vr_status }}",
+                    "rightValue": "TRANSIENT_ERROR",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2d_vr_status }}",
+                    "rightValue": "PERMANENT_ERROR",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._2d_vr_status }}",
+                    "rightValue": "INVALID_RESPONSE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": true
+        }
+      },
+      "name": "2D - Verifier Status Branch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -880,
+        128
+      ],
+      "id": "0c17e0fa-8a63-4e44-8686-b9b42a1c81f0"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{};\nconst rel=s.organization_relationship;\nconst o={...s};\nif(['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT'].includes(rel)){\n  o.manual_review=false; o.manual_review_reason=null; o.enrichment_status='processing'; o.result_status='pending'; o.routing_outcome=null; o._2d_decision='NONTERMINAL';\n} else if(rel==='UNRELATED'){\n  o.manual_review=true; o.manual_review_reason='employer_account_conflict'; o.enrichment_status='manual_review'; o.result_status='manual'; o.routing_outcome='MANUAL_REVIEW'; o._2d_decision='UNRELATED';\n} else if(rel==='UNKNOWN'){\n  o.manual_review=true; o.manual_review_reason='employer_account_relationship_unverified'; o.enrichment_status='manual_review'; o.result_status='manual'; o.routing_outcome='MANUAL_REVIEW'; o._2d_decision='UNKNOWN';\n} else {\n  o._2d_fail_reason='INTERNAL_CONTRACT_ERROR';\n}\nreturn [{json:o}];\n"
+      },
+      "name": "2D - Apply Relationship Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        128
+      ],
+      "id": "776a17ff-dc6b-4012-ae2d-471199dc8aba"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction ndom(d){ if(d==null||d==='') return ''; return String(d).trim().toLowerCase().replace(/\\.$/,''); }\nfunction nurl(u){ if(u==null||u==='') return ''; let x=String(u).trim().toLowerCase(); x=x.replace(/^https?:\\/\\//,'').replace(/^www\\./,''); x=x.replace(/[?#].*$/,'').replace(/\\/+$/,''); return x; }\nfunction orgApolloId(o){ const pr=(o&&o.provider_refs)||{}; return (pr.apollo_organization_id?String(pr.apollo_organization_id).trim():null)||null; }\nfunction validRfc3339(t){ if(t==null||t==='') return false; const m=String(t).trim().match(/^(\\d{4})-(\\d{2})-(\\d{2})[Tt ](\\d{2}):(\\d{2})(?::(\\d{2}))?(?:\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})$/); if(!m) return false; const y=+m[1], mo=+m[2], d=+m[3], h=+m[4], mi=+m[5], sec=+(m[6]||0); if(mo<1||mo>12) return false; if(h>23||mi>59||sec>59) return false; const leap=(y%4===0 && (y%100!==0 || y%400===0)); const dim=[31, leap?29:28, 31,30,31,30,31,31,30,31,30,31]; if(d<1||d>dim[mo-1]) return false; const off=m[7]; if(off!=='Z'){ const o=off.replace(':',''); const oh=+o.slice(1,3), om=+o.slice(3,5); if(oh>23||om>59) return false; } return true; }\nconst REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED','UNKNOWN'];\nconst EVID_REL_ENUM = ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT','UNRELATED'];\nconst EVID_STATUS = ['OK','NO_EVIDENCE','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst VERIF_STATUS = ['DECISION','NOT_APPLICABLE','TRANSIENT_ERROR','PERMANENT_ERROR','INVALID_RESPONSE'];\nconst QUALS = ['STRONG','MODERATE','REJECT'];\nconst VALIDITIES = ['CURRENT','HISTORICAL','UNKNOWN'];\n\nconst s=$input.first().json||{};\nconst fail = s._2d_fail_reason || null;\nif(fail){\n  const deterministicReason = fail==='INTERNAL_CONTRACT_ERROR'?'INTERNAL_CONTRACT_ERROR':(fail==='PROVIDER_TRANSIENT_FAILURE_EXHAUSTED'?'provider_transient_failure_exhausted':(fail==='PROVIDER_PERMANENT_FAILURE'?'provider_permanent_failure':'provider_invalid_response'));\n  return [{json:{...s, organization_relationship:null, organization_relationship_reason:deterministicReason, organization_relationship_source:null,\n    organization_relationship_evidence:{identity_gate:s._2d_id_gate||null,evidence_items:[],normalized_relationships:[],conflicts:[fail],precedence:'failure'},\n    manual_review:false, manual_review_reason:null, enrichment_status:'failed', result_status:'failed', routing_outcome:'FAILED',\n    _2d_decision:'FAILED', dispatch:'FAILED' }}];\n}\nconst ev=s.relationship_evidence_result||{};\nconst vr=s.relationship_verifier_result||{};\nconst inv=[];\nif(!EVID_STATUS.includes(ev.status)) inv.push('evidence_status');\nif((ev.status==='OK'||ev.status==='NO_EVIDENCE') && !ev.retrieved_at) inv.push('evidence_retrieved_at');\nif(ev.status==='NOT_APPLICABLE' && (ev.retrieved_at!==null || ((ev.diagnostics||{}).attempts||0)>0)) inv.push('evidence_not_applicable_invariant');\nif(!VERIF_STATUS.includes(vr.status)) inv.push('verifier_status');\nif(vr.status==='DECISION' && !vr.relationship) inv.push('verifier_relationship_on_decision');\nif(vr.status==='NOT_APPLICABLE' && vr.relationship!==null) inv.push('verifier_relationship_on_not_applicable');\nfunction lifecycle(d){\n  if(d==='NONTERMINAL') return ['SAME_ENTITY','SUBSIDIARY','PARENT','BRAND_OR_BUSINESS_UNIT'].includes(s.organization_relationship)&&s.manual_review===false&&s.manual_review_reason===null&&s.enrichment_status==='processing'&&s.result_status==='pending'&&s.routing_outcome===null;\n  if(d==='UNRELATED') return s.organization_relationship==='UNRELATED'&&s.manual_review===true&&s.manual_review_reason==='employer_account_conflict'&&s.enrichment_status==='manual_review'&&s.result_status==='manual'&&s.routing_outcome==='MANUAL_REVIEW';\n  if(d==='UNKNOWN') return s.organization_relationship==='UNKNOWN'&&s.manual_review===true&&s.manual_review_reason==='employer_account_relationship_unverified'&&s.enrichment_status==='manual_review'&&s.result_status==='manual'&&s.routing_outcome==='MANUAL_REVIEW';\n  if(d==='FAILED') return s.organization_relationship===null&&s.enrichment_status==='failed'&&s.result_status==='failed'&&s.routing_outcome==='FAILED';\n  return false;\n}\nconst d=s._2d_decision;\nconst ok = inv.length===0 && lifecycle(d);\nif(ok){ return [{json:{...s, _2d_gate_invariants:inv, dispatch:d}}]; }\nreturn [{json:{...s, organization_relationship:null, organization_relationship_reason:'internal_contract_error', organization_relationship_source:null,\n  organization_relationship_evidence:{identity_gate:s._2d_id_gate||null,evidence_items:[],normalized_relationships:[],conflicts:inv,precedence:'conformance_violation'},\n  manual_review:false, manual_review_reason:null, enrichment_status:'failed', result_status:'failed', routing_outcome:'FAILED',\n  _2d_decision:'FAILED', dispatch:'FAILED' }}];\n"
+      },
+      "name": "2D - Final Conformance Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        128
+      ],
+      "id": "f43e58ed-fd48-4ab2-a2a3-383184f4f0ce"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.dispatch }}",
+                    "rightValue": "NONTERMINAL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.dispatch }}",
+                    "rightValue": "UNRELATED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.dispatch }}",
+                    "rightValue": "UNKNOWN",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.dispatch }}",
+                    "rightValue": "FAILED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": true
+        }
+      },
+      "name": "2D - Branch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -224,
+        128
+      ],
+      "id": "a49f8c43-59c9-4560-8a38-55d2fe7617de"
+    },
+    {
+      "parameters": {},
+      "name": "2D - Continue Downstream",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "4c28a65a-f28e-4267-b39e-a7ccb387d975"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst s=$input.first().json||{}; const recordId=s.airtable_record_id||s.recordId||'';\nconst body={ fields:{\n  \"Domain Status\":s.domain_status,\"Is Personal Domain\":s.is_personal_domain,\"Is Role Inbox\":s.is_role_inbox,\"Name Quality\":s.name_quality,\"Name Quality Reason\":s.name_quality_reason,\n  \"Account Resolution Status\":s.account_resolution_status,\"Account Resolution Reason\":s.account_resolution_reason,\"Account Resolution\":s.account_resolution?JSON.stringify(s.account_resolution):null,\"Account Company\":s.account_company?JSON.stringify(s.account_company):null,\"Account Candidates\":Array.isArray(s.account_candidates)?JSON.stringify(s.account_candidates):null,\"Company Context\":s.company_context?JSON.stringify(s.company_context):null,\"Provider Diagnostics\":s.provider_diagnostics?JSON.stringify(s.provider_diagnostics):null,\n  \"Person Resolution Status\":s.person_resolution_status,\"Person Resolution Reason\":s.person_resolution_reason,\"Person Resolution Evidence\":s.person_resolution_evidence?JSON.stringify(s.person_resolution_evidence):null,\"Matched Employer Candidate\":s.matched_employer_candidate?JSON.stringify(s.matched_employer_candidate):null,\n  \"Inbound Employer Verification\":s.inbound_employer_verification?JSON.stringify(s.inbound_employer_verification):null,\"Matched Employer\":s.matched_employer?JSON.stringify(s.matched_employer):null,\"Person\":s.person?JSON.stringify(s.person):null,\n  \"Organization Relationship\":s.organization_relationship,\"Org Relationship Reason\":s.organization_relationship_reason,\"Org Relationship Source\":s.organization_relationship_source,\"Org Relationship Evidence\":s.organization_relationship_evidence?JSON.stringify(s.organization_relationship_evidence):null,\n  \"Manual Review Needed\":s.manual_review,\"Manual Review Reason\":s.manual_review_reason,\"Enrichment Status\":s.enrichment_status,\"Result Status\":s.result_status,\"Routing Outcome\":s.routing_outcome } };\nreturn [{json:{method:'PATCH',url:'https://api.airtable.com/v0/appn5d5Ca7g9IyNMf/tblnUG3bEN2QqyKT4/'+recordId,body:body,_2d_pre:s}}];\n"
+      },
+      "name": "2D - Pack Terminal Persist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        288
+      ],
+      "id": "7f263538-d4ab-4d7d-909c-ffdea5ba8513"
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ $vars.AIRTABLE_RETRY_WF_ID }}",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "2D - Persist",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        288
+      ],
+      "retryOnFail": false,
+      "id": "e61c0dd5-db9f-4d61-b493-c415376ea589",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "name": "2D - Terminal Stop",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        448,
+        224
+      ],
+      "id": "22c56e42-8fd9-4297-9fbe-37526127fa78"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst pre=$('2D - Pack Terminal Persist').first().json._2d_pre||($('2D - Input').first().json||{});\nreturn [{json:{...pre, organization_relationship:null, organization_relationship_reason:null, organization_relationship_source:null,\n  manual_review:false, manual_review_reason:null, enrichment_status:'failed', result_status:'failed', routing_outcome:'FAILED',\n  persistence_failure:{failed_at:new Date().toISOString(), reason:'terminal_persistence_failed', after_retry_policy:true}, _2d_decision:'FAILED', dispatch:'FAILED' }}];\n"
+      },
+      "name": "2D - Terminal Persist Failed (global, no recursive write)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        368
+      ],
+      "id": "176c60c3-f277-4637-a132-b43cbbbc8162"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "2D - Input": {
+      "main": [
+        [
+          {
+            "node": "2D - Input Contract Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Input Contract Gate": {
+      "main": [
+        [
+          {
+            "node": "2D - Gate Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Gate Passed?": {
+      "main": [
+        [
+          {
+            "node": "2D - Identity Gate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Build Failed Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Build Failed Outcome": {
+      "main": [
+        [
+          {
+            "node": "2D - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Identity Gate": {
+      "main": [
+        [
+          {
+            "node": "2D - Identity Gate Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Identity Gate Decision": {
+      "main": [
+        [
+          {
+            "node": "2D - Build Auto Same Entity",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Build Label Only Guard",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Prepare Evidence Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Build Auto Same Entity": {
+      "main": [
+        [
+          {
+            "node": "2D - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Build Label Only Guard": {
+      "main": [
+        [
+          {
+            "node": "2D - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Prepare Evidence Request": {
+      "main": [
+        [
+          {
+            "node": "2D - Relationship Evidence Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Relationship Evidence Service": {
+      "main": [
+        [
+          {
+            "node": "2D - Evidence Adapter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Evidence Retry Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Evidence Retry Classifier": {
+      "main": [
+        [
+          {
+            "node": "2D - Evidence Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Evidence Retry?": {
+      "main": [
+        [
+          {
+            "node": "2D - Evidence Retry Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Evidence Error Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Evidence Retry Wait": {
+      "main": [
+        [
+          {
+            "node": "2D - Relationship Evidence Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Evidence Error Result": {
+      "main": [
+        [
+          {
+            "node": "2D - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Evidence Adapter": {
+      "main": [
+        [
+          {
+            "node": "2D - Evidence Status Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Evidence Status Branch": {
+      "main": [
+        [
+          {
+            "node": "2D - Prepare Verifier Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Prepare Verifier Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Evidence Retry Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Evidence Failure Mapping",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Evidence Failure Mapping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Evidence Failure Mapping": {
+      "main": [
+        [
+          {
+            "node": "2D - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Prepare Verifier Request": {
+      "main": [
+        [
+          {
+            "node": "2D - Relationship Verifier Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Relationship Verifier Service": {
+      "main": [
+        [
+          {
+            "node": "2D - Verifier Adapter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Verifier Retry Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Verifier Retry Classifier": {
+      "main": [
+        [
+          {
+            "node": "2D - Verifier Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Verifier Retry?": {
+      "main": [
+        [
+          {
+            "node": "2D - Verifier Retry Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Verifier Error Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Verifier Retry Wait": {
+      "main": [
+        [
+          {
+            "node": "2D - Relationship Verifier Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Verifier Error Result": {
+      "main": [
+        [
+          {
+            "node": "2D - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Verifier Adapter": {
+      "main": [
+        [
+          {
+            "node": "2D - Verifier Status Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Verifier Status Branch": {
+      "main": [
+        [
+          {
+            "node": "2D - Apply Relationship Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Verifier Retry Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Apply Relationship Outcome": {
+      "main": [
+        [
+          {
+            "node": "2D - Final Conformance Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Final Conformance Gate": {
+      "main": [
+        [
+          {
+            "node": "2D - Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Branch": {
+      "main": [
+        [
+          {
+            "node": "2D - Continue Downstream",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Pack Terminal Persist",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Pack Terminal Persist",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Pack Terminal Persist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Pack Terminal Persist": {
+      "main": [
+        [
+          {
+            "node": "2D - Persist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2D - Persist": {
+      "main": [
+        [
+          {
+            "node": "2D - Terminal Stop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2D - Terminal Persist Failed (global, no recursive write)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a0465ce4-afbd-45dd-852b-bddb4e937e1d",
+  "meta": {
+    "instanceId": "103be981e8db8e32f88742df1e25a9d1be5dab7bb54ee11dc0f02d3c1876b528"
+  },
+  "nodeGroups": [],
+  "id": "9Yi80KUrq78yaFSF",
+  "tags": []
+}
